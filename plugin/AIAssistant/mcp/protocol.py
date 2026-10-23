@@ -2,6 +2,7 @@ import itertools
 import json
 
 from .registry import get_registry, run_guarded
+from ..server.derived_events import publish_derived
 
 SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"]
 SERVER_INFO = {"name": "ste-slicer-ai-assistant", "version": "1.0.0"}
@@ -37,6 +38,11 @@ def call_tool(name, arguments, registry=None, bus=None):
         text = json.dumps(payload, ensure_ascii=False, default=str)
         _publish(bus, "tool_result", {"call_id": call_id, "name": name, "ok": True,
                                       "result": payload, "duration_ms": duration})
+        if bus is not None:
+            try:
+                publish_derived(bus, registry, name, arguments, payload)
+            except Exception:
+                pass
         return {"content": [{"type": "text", "text": text}], "isError": False}
     _publish(bus, "tool_result", {"call_id": call_id, "name": name, "ok": False,
                                   "error": payload, "duration_ms": duration})

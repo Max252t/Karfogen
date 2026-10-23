@@ -6,6 +6,7 @@ import urllib.request
 
 import support
 from AIAssistant import config
+from AIAssistant.agent.agent import get_agent
 from AIAssistant.mcp.registry import get_registry
 from AIAssistant.server.http_server import AssistantServer
 
@@ -92,6 +93,31 @@ class HttpTest(unittest.TestCase):
             found = any(e["type"] == "error" for e in events["events"])
             time.sleep(0.1)
         self.assertTrue(found)
+
+
+    def test_export_rejects_unknown_kind(self):
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self.post("/api/export", {"kind": "pdf"})
+        self.assertEqual(ctx.exception.code, 400)
+
+    def test_export_reports_tool_failure(self):
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self.post("/api/export", {"kind": "gcode"})
+        self.assertEqual(ctx.exception.code, 409)
+
+    def test_message_rejects_inline_attachment_with_bad_extension(self):
+        import time
+        deadline = time.time() + 5
+        while get_agent().is_running() and time.time() < deadline:
+            time.sleep(0.1)
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self.post("/api/message", {"text": "x", "attachments": [{"name": "a.exe", "mime": "x", "data": "AAAA"}]})
+        self.assertEqual(ctx.exception.code, 400)
+
+    def test_settings_expose_ui_fields(self):
+        data = json.loads(urllib.request.urlopen(self.base + "/api/settings").read().decode("utf-8"))
+        self.assertIn("has_key", data)
+        self.assertIn("explain", data)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,157 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<title>AI Assistant</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>STE Slicer — Ассистент</title>
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
-<h1>AI Assistant для STE Slicer</h1>
-<p>Интерфейс чата ещё не подключён. Сервер работает: MCP доступен по адресу <code>/mcp</code>, API - по <code>/api/*</code>.</p>
+<div class="app">
+
+  <!-- ===== Левая панель: принтер, режим, профиль ===== -->
+  <aside class="sidebar" id="sidebar">
+    <button class="btn drawer-close" type="button" data-close>Закрыть</button>
+    <div class="brand">
+      <div class="brand-title">STE Slicer</div>
+      <div class="brand-sub">Ассистент настройки печати</div>
+    </div>
+
+    <section class="panel">
+      <div class="panel-label">Принтер</div>
+      <div class="printer-name" id="printerName">Stereotech Hybrid 530</div>
+      <div class="printer-meta"><span class="dot dot-ok"></span><span id="printerMeta">V5.2.4, слайсер подключён</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-label">Режим печати</div>
+      <div class="mode-switch" id="modeSwitch" role="radiogroup">
+        <button class="mode active" data-mode="classic" role="radio" aria-checked="true">3D</button>
+        <button class="mode" data-mode="cylindrical" role="radio" aria-checked="false">5D Spiral</button>
+        <button class="mode" data-mode="cylindrical_full" role="radio" aria-checked="false">5D</button>
+      </div>
+      <p class="hint">По умолчанию режим выбирает ассистент. Нажатие фиксирует режим вручную.</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-label">Активный профиль</div>
+      <dl class="kv" id="profileKv">
+        <dt>Качество</dt><dd id="kvQuality">Normal, 0.2 мм</dd>
+        <dt>Материал</dt><dd id="kvMaterial">PLA</dd>
+        <dt>Заполнение</dt><dd id="kvInfill">20 %</dd>
+        <dt>Поддержки</dt><dd id="kvSupport">нет</dd>
+      </dl>
+    </section>
+
+    <section class="panel">
+      <div class="panel-label">Шаблоны запросов</div>
+      <div class="quick" id="quickPrompts">
+        <button data-prompt="Кронштейн под нагрузку, PETG, без поддержек">Прочная деталь</button>
+        <button data-prompt="Подбери ориентацию модели, чтобы минимизировать поддержки">Ориентация модели</button>
+        <button data-prompt="Подойдёт ли для этой модели 5D Spiral? Сравни с 3D">Сравнить 3D и 5D</button>
+        <button data-prompt="Быстрая черновая печать, минимум времени">Черновая печать</button>
+      </div>
+    </section>
+
+    <div class="sidebar-footer">
+      <button class="btn" id="newChatBtn">Новый диалог</button>
+      <button class="btn" id="settingsBtn">Настройки</button>
+      <button class="btn" id="themeBtn" title="Светлая / тёмная тема">Тема</button>
+    </div>
+  </aside>
+
+  <!-- ===== Центр: диалог ===== -->
+  <main class="chat">
+    <header class="chat-head">
+      <button class="btn only-mobile" id="menuBtn">Меню</button>
+      <div class="chat-title">
+        <h1>Новый проект</h1>
+        <span class="status-pill" id="connPill"><span class="dot dot-ok"></span><span id="modelName">qwen3.8-flash</span></span>
+      </div>
+      <button class="btn only-mobile" id="statusToggle">Слайсинг</button>
+    </header>
+
+    <div class="messages" id="messages">
+      <div class="welcome" id="welcome">
+        <h2>Опишите задачу печати</h2>
+        <p>Укажите назначение детали, материал и ограничения. Можно приложить модель (STL, OBJ, 3MF) или фотографию (JPG, PNG).</p>
+        <p class="welcome-example">Пример: «Кронштейн под нагрузку, PETG, без поддержек».</p>
+      </div>
+    </div>
+
+    <form class="composer" id="composer">
+      <div class="dropzone" id="dropzone">Отпустите файлы, чтобы прикрепить</div>
+      <div class="attachments" id="attachments"></div>
+      <textarea id="input" rows="2" placeholder="Сообщение"></textarea>
+      <div class="composer-bar">
+        <label class="btn attach-btn" title="STL, OBJ, 3MF, JPG, PNG">
+          <input type="file" id="fileInput" multiple accept=".stl,.obj,.3mf,.jpg,.jpeg,.png">
+          Прикрепить файл
+        </label>
+        <span class="composer-hint">Enter — отправить, Shift+Enter — перенос строки</span>
+        <button class="btn primary" id="sendBtn" type="submit">Отправить</button>
+      </div>
+    </form>
+  </main>
+
+  <!-- ===== Правая панель: сцена и слайсинг ===== -->
+  <aside class="status" id="statusPanel">
+    <button class="btn drawer-close" type="button" data-close>Закрыть</button>
+    <section class="panel">
+      <div class="panel-label">Сцена</div>
+      <ul class="objects" id="objects">
+        <li class="empty">Модели не загружены</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-label">Слайсинг</div>
+      <div class="slice-card" id="sliceCard" data-state="idle">
+        <div class="slice-head">
+          <span class="slice-state" id="sliceState">Ожидание</span>
+          <span class="slice-pct" id="slicePct">0 %</span>
+        </div>
+        <div class="progress"><div class="progress-bar" id="sliceBar"></div></div>
+        <dl class="kv metrics">
+          <dt>Время печати</dt><dd id="mTime">—</dd>
+          <dt>Филамент</dt><dd id="mMat">—</dd>
+          <dt>Вес</dt><dd id="mWeight">—</dd>
+          <dt>Слоёв</dt><dd id="mLayers">—</dd>
+        </dl>
+      </div>
+      <div class="export">
+        <button class="btn primary" id="exportGcode" disabled>Сохранить G-code</button>
+        <button class="btn" id="export3mf" disabled>Сохранить 3MF</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-label">Изменённые параметры <span class="counter" id="changeCount">0</span></div>
+      <ul class="changes" id="changes">
+        <li class="empty">Изменений нет</li>
+      </ul>
+    </section>
+  </aside>
+</div>
+<div class="backdrop" id="backdrop"></div>
+
+<!-- ===== Настройки LLM ===== -->
+<dialog class="modal" id="settingsModal">
+  <form method="dialog" class="modal-body" id="settingsForm">
+    <h3>Подключение к LLM</h3>
+    <p class="hint">OpenAI-совместимый API (Chat Completions с tool calling). Ключ хранится в настройках STE Slicer.</p>
+    <label class="field"><span>Base URL</span><input name="base_url" placeholder="https://api.example.com/v1"></label>
+    <label class="field"><span>API key</span><input name="api_key" type="password" placeholder="sk-..." autocomplete="off"></label>
+    <label class="field"><span>Модель</span><input name="model" placeholder="model-name"></label>
+    <label class="field row"><input type="checkbox" name="explain" checked><span>Объяснять выбор параметров</span></label>
+    <div class="modal-actions">
+      <button class="btn" value="cancel">Отмена</button>
+      <button class="btn primary" value="save" id="saveSettings">Сохранить</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast"></div>
+<script src="app.js?v=4"></script>
 </body>
 </html>
