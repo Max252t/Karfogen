@@ -93,12 +93,25 @@ def _convert_value(stack, key, value):
     raise ToolError("Setting type '%s' of '%s' cannot be changed by this tool" % (stype, key))
 
 
+def _extruder_position(extruder):
+    if isinstance(extruder, bool):
+        raise ToolError("extruder must be an integer")
+    try:
+        number = float(extruder)
+        position = int(number)
+    except (TypeError, ValueError, OverflowError):
+        raise ToolError("extruder must be an integer, got '%s'" % (extruder,))
+    if number != position:
+        raise ToolError("extruder must be an integer, got '%s'" % (extruder,))
+    return position
+
+
 def _target_stacks(stack, key, extruder):
     if not stack.getProperty(key, "settable_per_extruder"):
         return [("global", stack)]
-    if extruder is not None and int(extruder) < 0:
+    position = 0 if extruder is None else _extruder_position(extruder)
+    if position < 0:
         return [("extruder %s" % pos, ext) for pos, ext in sorted(stack.extruders.items()) if ext.isEnabled]
-    position = 0 if extruder is None else int(extruder)
     ext = stack.extruders.get(str(position))
     if ext is None:
         raise ToolError("No extruder at position %s" % position)
@@ -133,6 +146,8 @@ def apply_settings_on_main(items):
             applied.extend(_apply_setting(key, item.get("value"), item.get("extruder")))
         except ToolError as e:
             errors.append({"key": key, "error": str(e)})
+        except (TypeError, ValueError, AttributeError) as e:
+            errors.append({"key": key, "error": "%s: %s" % (e.__class__.__name__, e)})
     return {"applied": applied, "errors": errors}
 
 
@@ -377,8 +392,12 @@ def set_setting(args):
 def set_settings(args):
     items = args["changes"]
     for item in items:
-        if not isinstance(item, dict) or "key" not in item or "value" not in item:
-            raise ToolError("Each change must be an object with key and value")
+        if not isinstance(item, dict) or not isinstance(item.get("key"), str) or "value" not in item:
+            raise ToolError("Each change must be an object with a string key and a value")
+        if item.get("extruder") is not None:
+            _extruder_position(item["extruder"])
+        if isinstance(item["value"], (dict, list)):
+            raise ToolError("Value of '%s' must be a string, number or boolean" % item["key"])
     return run_on_main(apply_settings_on_main, items)
 
 
