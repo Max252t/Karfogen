@@ -136,6 +136,8 @@ def resolve_material_id(material_type, available_ids, prefer_enduse=False):
     for cid in candidates:
         if cid in available:
             return cid
+        if cid + "_175" in available:
+            return cid + "_175"
     needle = material_type.lower().replace("_", "")
     for cid in available_ids:
         if cid.startswith(SPECIAL_PREFIXES):

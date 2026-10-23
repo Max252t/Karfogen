@@ -81,6 +81,13 @@ class MaterialTest(unittest.TestCase):
         self.assertEqual(knowledge.resolve_material_id("PETG", available, prefer_enduse=True), "enduse_petg")
         self.assertIsNone(knowledge.resolve_material_id("PC", available))
 
+    def test_generic_materials_exist_only_with_175_suffix(self):
+        available = ["enduse_pc", "generic_pc_175", "generic_petg_175", "generic_tpu_175", "fiberpart_pc_g20"]
+        self.assertEqual(knowledge.resolve_material_id("PETG", available), "generic_petg_175")
+        self.assertEqual(knowledge.resolve_material_id("TPU", available), "generic_tpu_175")
+        self.assertEqual(knowledge.resolve_material_id("PC", available), "generic_pc_175")
+        self.assertEqual(knowledge.resolve_material_id("PC", available, prefer_enduse=True), "enduse_pc")
+
     def test_special_families_are_never_a_fallback(self):
         available = ["fiberpart_pc_g20", "sealant_tpu93", "contifiber_cpa", "generic_pla"]
         self.assertIsNone(knowledge.resolve_material_id("PC", available))
