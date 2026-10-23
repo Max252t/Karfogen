@@ -13,12 +13,21 @@ MAX_TOOL_RESULT_CHARS = 8000
 LLM_EXCLUDED_TOOLS = set(["create_profile"])
 OLD_TOOL_RESULT_CHARS = 400
 MAX_HISTORY_CHARS = 120000
+IMAGE_COST_CHARS = 6000
+IMAGE_ERROR_HINTS = ("image", "vision", "multimodal", "multi-modal", "изображ", "image_url", "content type")
+
+
+def is_image_rejection(error):
+    if error.status not in (400, 415, 422):
+        return False
+    text = str(error).lower()
+    return any(hint in text for hint in IMAGE_ERROR_HINTS)
 
 
 def _message_size(message):
     content = message.get("content")
     if isinstance(content, list):
-        size = sum(len(part.get("text", "")) for part in content if part.get("type") == "text")
+        size = sum(len(part.get("text", "")) if part.get("type") == "text" else IMAGE_COST_CHARS for part in content)
     else:
         size = len(content or "")
     return size + len(json.dumps(message.get("tool_calls") or [], ensure_ascii=False))
@@ -139,8 +148,14 @@ class Agent(object):
         if images and with_images:
             parts = [{"type": "text", "text": full_text}]
             for item in images:
-                parts.append({"type": "image_url", "image_url": {"url": uploads.image_data_url(item)}})
-            return {"role": "user", "content": parts}
+                url = uploads.image_data_url(item)
+                if url is None:
+                    parts[0]["text"] += "\nИзображение %s слишком большое и не передано." % item["name"]
+                    continue
+                parts.append({"type": "image_url", "image_url": {"url": url}})
+            if len(parts) > 1:
+                return {"role": "user", "content": parts}
+            return {"role": "user", "content": parts[0]["text"]}
         return {"role": "user", "content": full_text}
 
     def _status(self, text):
@@ -185,7 +200,7 @@ class Agent(object):
             try:
                 reply = self._chat(self._messages(), tools)
             except llm_client.LLMError as e:
-                if has_images and e.status in (400, 415, 422):
+                if has_images and is_image_rejection(e):
                     self._history[self._first_user_index()] = \
                         self._build_user_message(text, attachment_ids, model_name, with_images=False,
                                                  forced_mode=forced_mode)

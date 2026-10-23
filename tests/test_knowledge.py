@@ -117,6 +117,35 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(quality, "normal")
 
 
+class ReasonsTest(unittest.TestCase):
+    def tearDown(self):
+        from AIAssistant import config
+        config.set_value("language", "auto")
+
+    def test_reasons_follow_language(self):
+        from AIAssistant import config
+        config.set_value("language", "en")
+        english = knowledge.choose_mode(sym(True, 0.13), ["precision"])[1][0]
+        config.set_value("language", "ru")
+        russian = knowledge.choose_mode(sym(True, 0.13), ["precision"])[1][0]
+        self.assertNotEqual(english, russian)
+        self.assertIn("disc", english)
+        self.assertIn("диск", russian)
+
+    def test_every_reason_exists_in_both_languages(self):
+        self.assertEqual(set(knowledge.REASONS["ru"]), set(knowledge.REASONS["en"]))
+
+    def test_tight_temperature_margin_is_penalized(self):
+        ranked = dict((r["type"], r) for r in knowledge.rank_materials(["load_bearing"], max_temp_c=70))
+        self.assertTrue(any("10" in note for note in ranked["SBS"]["notes"]))
+        self.assertLess(ranked["SBS"]["score"], ranked["PC"]["score"])
+
+    def test_special_material_is_not_a_candidate(self):
+        for ids in knowledge.MATERIAL_IDS.values():
+            for material_id in ids:
+                self.assertFalse(knowledge.is_special_material(material_id), material_id)
+
+
 @unittest.skipUnless(os.path.isdir(SAMPLES), "sample parts are not available")
 class SamplePartsTest(unittest.TestCase):
     EXPECTED = {

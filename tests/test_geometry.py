@@ -61,6 +61,27 @@ class GeometryTest(unittest.TestCase):
         self.assertAlmostEqual(info["diameter_mm"], 40.0, delta=0.5)
         self.assertAlmostEqual(info["aspect"], 1.5, delta=0.05)
 
+    def test_tilted_cylinder_axis_is_found(self):
+        tris = cylinder_triangles(20, 60)
+        matrix = geometry.rotation_matrix([1.0, 0.0, 1.0], math.radians(30))
+        info = geometry.axisymmetry(tris.dot(matrix.T))
+        self.assertTrue(info["is_axisymmetric"])
+        self.assertEqual(info["axis"], "tilted")
+        expected = matrix.dot(numpy.array([0.0, 1.0, 0.0]))
+        self.assertAlmostEqual(abs(float(numpy.dot(info["axis_vector"], expected))), 1.0, places=3)
+        self.assertAlmostEqual(info["diameter_mm"], 40.0, delta=0.5)
+        self.assertAlmostEqual(info["length_mm"], 60.0, delta=0.5)
+
+    def test_world_axis_vector_is_reported(self):
+        info = geometry.axisymmetry(cylinder_triangles(20, 60))
+        self.assertEqual(info["axis_index"], 1)
+        self.assertEqual(info["axis_vector"], [0.0, 1.0, 0.0])
+
+    def test_polygonal_prisms_are_not_bodies_of_revolution(self):
+        for sides in (6, 8):
+            info = geometry.axisymmetry(cylinder_triangles(20, 60, segments=sides))
+            self.assertFalse(info["is_axisymmetric"], sides)
+
     def test_box_is_not_axisymmetric(self):
         self.assertFalse(geometry.axisymmetry(box_triangles(10, 20, 50))["is_axisymmetric"])
 

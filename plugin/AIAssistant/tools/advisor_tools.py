@@ -66,7 +66,7 @@ def recommend_setup(args):
     mode, mode_reasons = knowledge.choose_mode(analysis, tags)
     if args.get("force_mode"):
         mode = args["force_mode"]
-        mode_reasons = ["режим задан явно: %s" % knowledge.MODE_LABELS[mode]]
+        mode_reasons = [knowledge.reason("mode_forced", knowledge.MODE_LABELS[mode])]
 
     ranked = knowledge.rank_materials(tags, args.get("max_temp_c"), args.get("flexibility"))
     materials = _call("list_materials", {})["materials"]
@@ -97,7 +97,8 @@ def recommend_setup(args):
         "quality_type": quality,
         "quality_reason": reasons.get("quality"),
         "settings": [{"key": k, "value": v, "reason": reasons.get(k, "")} for k, v in settings.items()],
-        "orientation": "ось симметрии вертикально, по центру стола" if mode != "classic" else "ориентация по цели %s" % orientation_goal,
+        "orientation": (knowledge.reason("orient_axis") if mode != "classic"
+                        else knowledge.reason("orient_goal", orientation_goal)),
         "applied": False,
     }
     if not args.get("apply"):
