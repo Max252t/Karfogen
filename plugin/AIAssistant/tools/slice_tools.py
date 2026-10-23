@@ -26,6 +26,7 @@ class SliceMonitor(object):
         self.progress = 0.0
         self.finished = threading.Event()
         self.connected = set()
+        self._wrappers = []
         self.lock = threading.Lock()
 
     def reset(self):
@@ -46,13 +47,20 @@ class SliceMonitor(object):
             self.progress = float(progress)
         get_bus().publish("slice_progress", {"percent": int(round(float(progress) * 100))})
 
+    def _guard(self, backend, handler):
+        def wrapper(value):
+            if _app().getBackend() is backend:
+                handler(value)
+        self._wrappers.append(wrapper)
+        return wrapper
+
     def attach(self):
         backends = _app().getBackendManager().getBackends()
         for backend_id, backend in backends.items():
             if backend_id in self.connected:
                 continue
-            backend.backendStateChange.connect(self.on_state)
-            backend.processingProgress.connect(self.on_progress)
+            backend.backendStateChange.connect(self._guard(backend, self.on_state))
+            backend.processingProgress.connect(self._guard(backend, self.on_progress))
             self.connected.add(backend_id)
 
 
