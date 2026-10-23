@@ -109,6 +109,24 @@ class ManagerTest(unittest.TestCase):
         manager.open(second["id"])
         self.assertEqual(manager.agent.history[0]["content"], "Второй")
 
+    def test_new_project_prepares_slicer(self):
+        from AIAssistant.mcp.registry import get_registry
+        calls = []
+        registry = get_registry()
+        registry.register("clear_scene", "", {"type": "object", "properties": {}}, lambda a: calls.append("clear_scene") or {})
+        registry.register("reset_settings", "", {"type": "object", "properties": {}}, lambda a: calls.append("reset_settings") or {})
+        manager = fresh_manager()
+        manager.ensure_current()
+        self.assertEqual(calls, ["clear_scene", "reset_settings"])
+        manager.create()
+        self.assertEqual(calls, ["clear_scene", "reset_settings"] * 2)
+        manager.open(manager.current_id)
+        self.assertEqual(len(calls), 4)
+
+    def test_create_profile_is_hidden_from_llm(self):
+        from AIAssistant.agent import agent as agent_module
+        self.assertIn("create_profile", agent_module.LLM_EXCLUDED_TOOLS)
+
     def test_busy_agent_blocks_switching(self):
         manager = fresh_manager()
         manager.ensure_current()
