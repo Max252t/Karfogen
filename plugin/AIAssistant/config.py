@@ -11,6 +11,8 @@ DEFAULTS = {
     "verify_ssl": True,
     "max_iterations": 25,
     "explain": True,
+    "auto_export": True,
+    "language": "auto",
 }
 
 ENV_NAMES = {
@@ -93,6 +95,10 @@ def public_settings():
         "api_key_set": bool(get("api_key")),
         "has_key": bool(get("api_key")),
         "explain": get("explain"),
+        "auto_export": get("auto_export"),
+        "language": get("language"),
+        "language_effective": effective_language(),
+        "slicer_language": slicer_language(),
         "results_dir": get_results_dir(),
         "port": get("port"),
         "verify_ssl": get("verify_ssl"),
@@ -100,13 +106,32 @@ def public_settings():
 
 
 def update_settings(data):
-    for key in ("base_url", "model", "results_dir", "port", "verify_ssl", "explain"):
+    for key in ("base_url", "model", "results_dir", "port", "verify_ssl", "explain", "auto_export", "language"):
         if key in data:
             set_value(key, data[key])
     key = data.get("api_key")
     if key and "..." not in key and not set(key) == {"*"}:
         set_value("api_key", key.strip())
     return public_settings()
+
+
+SUPPORTED_LANGUAGES = ("ru", "en")
+
+
+def slicer_language():
+    try:
+        from UM.Application import Application
+        value = Application.getInstance().getPreferences().getValue("general/language")
+    except Exception:
+        return ""
+    return str(value or "").split("_")[0].lower()
+
+
+def effective_language():
+    chosen = get("language")
+    if chosen and chosen != "auto":
+        return chosen
+    return slicer_language() or "en"
 
 
 def _config_dir():
@@ -120,7 +145,7 @@ def _config_dir():
 def get_results_dir():
     value = get("results_dir")
     if value:
-        return value
+        return os.path.expanduser(value)
     return os.path.join(os.path.expanduser("~"), "AIAssistantResults")
 
 

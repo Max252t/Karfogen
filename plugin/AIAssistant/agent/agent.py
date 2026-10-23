@@ -72,6 +72,7 @@ class Agent(object):
         self._lock = threading.Lock()
         self._running = False
         self._thread = None
+        self.on_finished = None
 
     def reset(self):
         with self._lock:
@@ -83,6 +84,12 @@ class Agent(object):
 
     def is_running(self):
         return self._running
+
+    def get_history(self):
+        return list(self._history)
+
+    def set_history(self, history):
+        self._history = list(history)
 
     def submit(self, text, attachment_ids=None, model_name=None, forced_mode=None):
         with self._lock:
@@ -147,6 +154,11 @@ class Agent(object):
             self._bus.publish("done", {})
             with self._lock:
                 self._running = False
+            if self.on_finished is not None:
+                try:
+                    self.on_finished()
+                except Exception:
+                    _log("e", traceback.format_exc())
 
     def _messages(self):
         return [{"role": "system", "content": prompts.system_prompt()}] + compact_history(self._history)

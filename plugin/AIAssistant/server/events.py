@@ -41,6 +41,17 @@ class EventBus(object):
         with self._cond:
             self._events = []
 
+    def snapshot(self):
+        with self._cond:
+            return list(self._events)
+
+    def load(self, events):
+        with self._cond:
+            self._events = list(events)[-self.MAX_EVENTS:]
+            highest = max([e["id"] for e in self._events] or [0])
+            self._last_id = max(self._last_id, highest)
+            self._cond.notify_all()
+
 
 _bus = EventBus()
 
