@@ -16,6 +16,7 @@
   "use strict";
 
   var $ = function (id) { return document.getElementById(id); };
+  var t = function () { return I18N.t.apply(null, arguments); };
   var els = {
     messages: $("messages"), welcome: $("welcome"), composer: $("composer"),
     input: $("input"), sendBtn: $("sendBtn"), fileInput: $("fileInput"),
@@ -32,6 +33,8 @@
     files: [],
     busy: false,
     localUser: 0,
+    lang: "ru",
+    projects: null,
     lastEvent: 0,
     tools: {},
     changes: 0,
@@ -59,9 +62,9 @@
     }).join("");
   }
   function fmtSize(b) {
-    if (b < 1024) return b + " Б";
-    if (b < 1048576) return (b / 1024).toFixed(0) + " КБ";
-    return (b / 1048576).toFixed(1) + " МБ";
+    if (b < 1024) return b + " " + t("b");
+    if (b < 1048576) return (b / 1024).toFixed(0) + " " + t("kb");
+    return (b / 1048576).toFixed(1) + " " + t("mb");
   }
   function ext(name) { return (name.split(".").pop() || "").toUpperCase(); }
   function scrollDown() { els.messages.scrollTop = els.messages.scrollHeight; }
@@ -76,8 +79,12 @@
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
     };
     return fetch(path, opts).then(function (r) {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
+      if (r.ok) return r.json();
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        var err = new Error(data.error || "HTTP " + r.status);
+        err.status = r.status;
+        throw err;
+      });
     });
   }
 
@@ -87,7 +94,7 @@
     var msg = document.createElement("div");
     msg.className = "msg " + role;
     msg.innerHTML =
-      '<div class="msg-author">' + (role === "user" ? "Вы" : "Ассистент") + "</div>" +
+      '<div class="msg-author">' + (role === "user" ? t("you") : t("assistant")) + "</div>" +
       '<div class="msg-body"></div>';
     var body = msg.querySelector(".msg-body");
     if (extraNode) body.appendChild(extraNode);
@@ -153,12 +160,12 @@
       '<button class="tool-head" type="button">' +
         '<span class="tool-name">' + esc(ev.name) + "</span>" +
         '<span class="tool-summary">' + esc(summarizeArgs(ev.args)) + "</span>" +
-        '<span class="tool-status"><span class="spinner"></span> выполняется</span>' +
-        '<span class="tool-chevron">подробнее</span>' +
+        '<span class="tool-status"><span class="spinner"></span> ' + t("running") + "</span>" +
+        '<span class="tool-chevron">' + t("details") + "</span>" +
       "</button>" +
       '<div class="tool-details">' +
-        "<h4>Аргументы</h4><pre>" + esc(JSON.stringify(ev.args || {}, null, 2)) + "</pre>" +
-        '<h4>Результат</h4><pre class="tool-result">…</pre>' +
+        "<h4>" + t("arguments") + "</h4><pre>" + esc(JSON.stringify(ev.args || {}, null, 2)) + "</pre>" +
+        "<h4>" + t("result") + '</h4><pre class="tool-result">…</pre>' +
       "</div>";
     card.querySelector(".tool-head").addEventListener("click", function () {
       card.classList.toggle("open");
@@ -171,7 +178,7 @@
     var card = state.tools[ev.id];
     if (!card) return;
     card.dataset.status = ev.ok === false ? "error" : "ok";
-    card.querySelector(".tool-status").textContent = ev.ok === false ? "ошибка" : "выполнено";
+    card.querySelector(".tool-status").textContent = ev.ok === false ? t("failed") : t("ok");
     card.querySelector(".tool-result").textContent =
       typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result, null, 2);
     if (ev.ok === false) card.classList.add("open");
@@ -201,20 +208,20 @@
   }
   function renderScene(objects) {
     if (!objects || !objects.length) {
-      els.objects.innerHTML = '<li class="empty">Модели пока не загружены</li>';
+      els.objects.innerHTML = '<li class="empty">' + t("no_models_yet") + "</li>";
       return;
     }
     els.objects.innerHTML = objects.map(function (o) {
       return '<li class="object"><div class="object-icon">' + esc(ext(o.name)) + "</div><div>" +
         '<div class="object-name">' + esc(o.name) + "</div>" +
-        '<div class="object-dims">' + o.size.map(function (v) { return v.toFixed(1); }).join(" × ") + " мм</div>" +
+        '<div class="object-dims">' + o.size.map(function (v) { return v.toFixed(1); }).join(" × ") + " " + t("mm") + "</div>" +
         "</div></li>";
     }).join("");
   }
-  var SLICE_LABELS = { idle: "Ожидание", slicing: "Нарезка…", done: "Готово", error: "Ошибка" };
+  function sliceLabel(st) { return { idle: t("idle"), slicing: t("slicing_state"), done: t("done"), error: t("error") }[st]; }
   function sliceProgress(st, pct) {
     els.sliceCard.dataset.state = st;
-    els.sliceState.innerHTML = (st === "slicing" ? '<span class="spinner"></span>' : "") + SLICE_LABELS[st];
+    els.sliceState.innerHTML = (st === "slicing" ? '<span class="spinner"></span>' : "") + sliceLabel(st);
     var p = Math.round((pct || 0) * 100);
     els.slicePct.textContent = p + " %";
     els.sliceBar.style.width = p + "%";
@@ -231,7 +238,7 @@
   function decision(ev) {
     var box = document.createElement("div");
     box.className = "decision";
-    box.innerHTML = "<h4>" + esc(ev.title || "Принятые решения") + "</h4><table>" +
+    box.innerHTML = "<h4>" + esc(ev.title || t("decisions")) + "</h4><table>" +
       ev.rows.map(function (r) {
         return "<tr><td>" + esc(r[0]) + "</td><td>" + esc(r[1]) + "</td><td>" + esc(r[2]) + "</td></tr>";
       }).join("") + "</table>";
@@ -284,11 +291,15 @@
         showTyping(false);
         var b = document.createElement("div");
         b.className = "bubble error";
-        b.innerHTML = "Ошибка: " + esc(ev.message);
+        b.innerHTML = esc(t("error_prefix")) + esc(ev.message);
         assistantBody().appendChild(b);
         setBusy(false);
         break;
-      case "done": showTyping(false); setBusy(false); break;
+      case "done":
+        showTyping(false);
+        setBusy(false);
+        if (!state.demo) loadProjects().catch(function () {});
+        break;
     }
     if (ev.type === "tool_result" && state.busy) showTyping(true);
   }
@@ -336,7 +347,7 @@
       attachments: files.map(function (f) { return { name: f.name, mime: f.mime, data: f.data }; })
     }).catch(function () {
       state.demo = true;
-      toast("Сервер плагина недоступен, включён демо-режим");
+      toast(t("demo_toast"));
       runDemo(text, files);
     });
   }
@@ -373,7 +384,7 @@
   var ALLOWED = /\.(stl|obj|3mf|jpe?g|png)$/i;
   function addFiles(list) {
     Array.prototype.forEach.call(list, function (file) {
-      if (!ALLOWED.test(file.name)) { toast("Формат не поддерживается: " + file.name); return; }
+      if (!ALLOWED.test(file.name)) { toast(t("format_unsupported", file.name)); return; }
       var reader = new FileReader();
       reader.onload = function () {
         var url = reader.result;
@@ -397,7 +408,7 @@
       b.classList.toggle("active", on);
       b.setAttribute("aria-checked", on);
     });
-    if (!fromAgent) toast("Режим зафиксирован: " + document.querySelector('.mode[data-mode="' + mode + '"]').textContent.trim().replace(/\s+/, " "));
+    if (!fromAgent) toast(t("mode_fixed", document.querySelector('.mode[data-mode="' + mode + '"]').textContent.trim().replace(/\s+/, " ")));
   }
 
   /* ---------- настройки ---------- */
@@ -408,22 +419,37 @@
       api("/api/settings").then(function (s) {
         form.base_url.value = s.base_url || "";
         form.model.value = s.model || "";
-        form.api_key.placeholder = s.has_key ? "•••••••• (сохранён)" : "sk-…";
+        form.api_key.placeholder = s.has_key ? t("key_saved") : "sk-…";
         form.explain.checked = s.explain !== false;
+        form.auto_export.checked = s.auto_export !== false;
+        form.results_dir.value = s.results_dir || "";
+        form.language.value = s.language || "auto";
       }).catch(function () {});
     }
     dlg.showModal();
   }
+  $("browseBtn").addEventListener("click", function () {
+    var form = $("settingsForm");
+    if (state.demo) return;
+    api("/api/choose_folder", { start: form.results_dir.value }).then(function (r) {
+      if (r.path) form.results_dir.value = r.path;
+    }).catch(function () { toast(t("folder_failed")); });
+  });
   $("settingsModal").addEventListener("close", function () {
     if (this.returnValue !== "save") return;
     var f = $("settingsForm");
-    var data = { base_url: f.base_url.value.trim(), model: f.model.value.trim(), explain: f.explain.checked };
+    var data = {
+      base_url: f.base_url.value.trim(), model: f.model.value.trim(), explain: f.explain.checked,
+      auto_export: f.auto_export.checked, results_dir: f.results_dir.value.trim(), language: f.language.value
+    };
     if (f.api_key.value) data.api_key = f.api_key.value;
     f.api_key.value = "";
     if (data.model) $("modelName").textContent = data.model.split("/").pop();
-    if (state.demo) { toast("Демо-режим: настройки не сохраняются"); return; }
-    api("/api/settings", data).then(function () { toast("Настройки сохранены"); })
-      .catch(function () { toast("Не удалось сохранить настройки"); });
+    if (state.demo) { toast(t("demo_no_save")); return; }
+    api("/api/settings", data).then(function (s) {
+      applyLanguage(s.language_effective);
+      toast(t("settings_saved"));
+    }).catch(function () { toast(t("settings_failed")); });
   });
 
   /* ---------- обработчики UI ---------- */
@@ -459,9 +485,15 @@
   $("quickPrompts").addEventListener("click", function (e) {
     var p = e.target.closest("button");
     if (!p) return;
-    els.input.value = p.dataset.prompt;
+    var text = t(p.dataset.tpl + "_text");
+    var hadText = els.input.value.trim() !== "";
+    els.input.value = hadText ? els.input.value.replace(/\s+$/, "") + "\n\n" + text : text;
     autoGrow();
     els.input.focus();
+    var firstBreak = hadText ? els.input.value.lastIndexOf("\n\n") + 2 : 0;
+    var lineEnd = els.input.value.indexOf("\n", firstBreak);
+    var caret = lineEnd === -1 ? els.input.value.length : lineEnd;
+    els.input.setSelectionRange(caret, caret);
     closeDrawers();
   });
   $("settingsBtn").addEventListener("click", openSettings);
@@ -471,11 +503,105 @@
     root.dataset.theme = next;
     try { localStorage.setItem("ste-theme", next); } catch (e) {}
   });
-  $("newChatBtn").addEventListener("click", function () {
-    if (state.demo) { location.reload(); return; }
-    api("/api/reset", {}).then(function () { location.reload(); })
-      .catch(function () { toast("Ассистент занят, дождитесь ответа"); });
+  function applyLanguage(code) {
+    state.lang = I18N.setLang(code || (navigator.language || "en").split("-")[0]);
+    renderProjectTitle();
+    if (!els.changeCount.textContent || state.changes === 0) {
+      els.changes.innerHTML = '<li class="empty">' + t("no_changes") + "</li>";
+    }
+    if (!els.objects.querySelector(".object")) {
+      els.objects.innerHTML = '<li class="empty">' + t("no_models") + "</li>";
+    }
+    sliceProgress(els.sliceCard.dataset.state, parseInt(els.slicePct.textContent, 10) / 100 || 0);
+  }
+
+  /* ---------- проекты ---------- */
+  function projectError(err) {
+    toast(err && err.status === 409 ? t("busy") : (err && err.message) || t("project_failed"));
+  }
+  function renderProjectTitle() {
+    var current = state.projects && state.projects.current;
+    $("projectTitle").textContent = current ? current.name : t("new_project");
+    $("renameBtn").hidden = !current;
+  }
+  function loadProjects() {
+    return api("/api/projects").then(function (data) {
+      state.projects = data;
+      renderProjectTitle();
+      return data;
+    });
+  }
+  function formatDate(ts) {
+    var d = new Date(ts * 1000);
+    return d.toLocaleDateString(I18N.get()) + " " + d.toLocaleTimeString(I18N.get(), { hour: "2-digit", minute: "2-digit" });
+  }
+  function renderProjectList() {
+    var list = $("projectList");
+    var data = state.projects || { projects: [], current: null };
+    list.innerHTML = "";
+    if (!data.projects.length) {
+      list.innerHTML = '<li class="empty">' + t("projects_empty") + "</li>";
+      return;
+    }
+    data.projects.forEach(function (p) {
+      var isCurrent = data.current && data.current.id === p.id;
+      var li = document.createElement("li");
+      li.className = "project-item" + (isCurrent ? " current" : "");
+      li.innerHTML =
+        '<button type="button" class="project-open"><span class="project-name">' + esc(p.name) + "</span>" +
+        '<span class="project-meta">' + esc(formatDate(p.updated)) + " · " + esc(t("messages", p.messages)) +
+        (isCurrent ? " · " + esc(t("current")) : "") + "</span></button>" +
+        '<span class="project-actions"><button type="button" class="btn btn-small" data-act="rename">' + esc(t("rename")) +
+        '</button><button type="button" class="btn btn-small" data-act="delete">' + esc(t("delete")) + "</button></span>";
+      li.querySelector(".project-open").addEventListener("click", function () { projectAction({ action: "open", id: p.id }, true); });
+      li.querySelector('[data-act="rename"]').addEventListener("click", function () { askRename(p); });
+      li.querySelector('[data-act="delete"]').addEventListener("click", function () {
+        if (!window.confirm(t("delete_confirm", p.name))) return;
+        projectAction({ action: "delete", id: p.id }, false);
+      });
+      list.appendChild(li);
+    });
+  }
+  function showProjects(on) {
+    $("projectsScreen").hidden = !on;
+    if (on) loadProjects().then(renderProjectList).catch(projectError);
+  }
+  function projectAction(body, enter) {
+    if (state.demo) { toast(t("demo_no_save")); return; }
+    api("/api/projects", body).then(function (data) {
+      if (enter) {
+        try { sessionStorage.setItem("ste-opened", "1"); } catch (e) {}
+        location.reload();
+        return;
+      }
+      state.projects = data;
+      renderProjectTitle();
+      renderProjectList();
+    }).catch(projectError);
+  }
+  var renameTarget = null;
+  function askRename(project) {
+    renameTarget = project;
+    var form = $("renameForm");
+    form.name.value = project.name;
+    $("renameModal").showModal();
+    form.name.select();
+  }
+  $("renameModal").addEventListener("close", function () {
+    if (this.returnValue !== "save" || !renameTarget) return;
+    var name = $("renameForm").name.value.trim();
+    var target = renameTarget;
+    renameTarget = null;
+    if (!name || name === target.name) return;
+    projectAction({ action: "rename", id: target.id, name: name }, false);
   });
+  $("renameBtn").addEventListener("click", function () {
+    var current = state.projects && state.projects.current;
+    if (current) askRename(current);
+  });
+  $("projectsBtn").addEventListener("click", function () { closeDrawers(); showProjects(true); });
+  $("projectsCloseBtn").addEventListener("click", function () { showProjects(false); });
+  $("newProjectBtn").addEventListener("click", function () { projectAction({ action: "create" }, true); });
   // выдвижные панели в узком окне: закрываются кнопкой, кликом по фону и Esc
   function openDrawer(id) {
     closeDrawers();
@@ -498,9 +624,11 @@
   [els.exportGcode, els.export3mf].forEach(function (btn) {
     btn.addEventListener("click", function () {
       var kind = btn === els.exportGcode ? "gcode" : "3mf";
-      if (state.demo) { toast("Демо: экспорт " + kind.toUpperCase()); return; }
-      api("/api/export", { kind: kind }).then(function (r) { toast("Сохранено: " + (r.path || kind)); })
-        .catch(function () { toast("Ошибка экспорта"); });
+      if (state.demo) { toast(t("export_demo", kind.toUpperCase())); return; }
+      btn.disabled = true;
+      api("/api/export", { kind: kind }).then(function (r) { toast(t("export_saved", r.path || kind)); })
+        .catch(function (err) { toast(t("export_failed", err.message)); })
+        .then(function () { btn.disabled = false; });
     });
   });
 
@@ -561,15 +689,22 @@
   }
 
   /* ---------- старт ---------- */
+  applyLanguage(null);
   if (!state.demo) {
     api("/api/settings").then(function (s) {
       if (s.model) $("modelName").textContent = s.model.split("/").pop();
-      poll();
+      applyLanguage(s.language_effective);
+      return loadProjects().then(function (data) {
+        var opened = false;
+        try { opened = sessionStorage.getItem("ste-opened") === "1"; } catch (e) {}
+        if (!opened && data.projects.length) showProjects(true);
+        poll();
+      });
     }).catch(function () {
       state.demo = true;
-      $("connPill").innerHTML = '<span class="dot dot-warn"></span>Демо-режим';
+      $("connPill").innerHTML = '<span class="dot dot-warn"></span>' + t("demo_pill");
     });
   } else {
-    $("connPill").innerHTML = '<span class="dot dot-warn"></span>Демо-режим';
+    $("connPill").innerHTML = '<span class="dot dot-warn"></span>' + t("demo_pill");
   }
 })();
