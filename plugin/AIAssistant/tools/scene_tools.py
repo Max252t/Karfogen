@@ -233,7 +233,8 @@ def analyze_mesh(args):
     result = geometry.analyze(tris)
     sym = result.get("axisymmetry")
     if sym:
-        sym["axis"] = AXIS_UM_TO_PLATE[sym["axis"]]
+        sym["axis"] = AXIS_UM_TO_PLATE.get(sym["axis"], sym["axis"])
+        sym["axis_vector"] = [_r(v, 4) for v in um_to_plate(sym["axis_vector"])]
         sym.pop("axis_index", None)
         sym.pop("center", None)
     result["object_id"] = object_id
@@ -331,15 +332,15 @@ def align_symmetry_axis(args):
     sym = geometry.axisymmetry(tris)
     if not sym:
         raise ToolError("Cannot determine symmetry axis")
-    axis_vec = [0.0, 0.0, 0.0]
-    axis_vec[sym["axis_index"]] = 1.0
+    axis_vec = sym["axis_vector"]
 
     def work():
         node = _find_node(object_id)
         _align_to(node, axis_vec, (0.0, 1.0, 0.0))
         return _node_info(node)
     result = run_on_main(work)
-    result["symmetry"] = {"axis_before": AXIS_UM_TO_PLATE["xyz"[sym["axis_index"]]],
+    result["symmetry"] = {"axis_before": AXIS_UM_TO_PLATE.get(sym["axis"], sym["axis"]),
+                          "axis_vector_before": [_r(v, 4) for v in um_to_plate(sym["axis_vector"])],
                           "symmetry_error": sym["symmetry_error"], "is_axisymmetric": sym["is_axisymmetric"]}
     return result
 
