@@ -56,6 +56,8 @@ MATERIAL_IDS = OrderedDict([
     ("TPU", ["generic_tpu", "enduse_tpu_d70", "sealant_tpu", "generic_tpu_175"]),
 ])
 
+SPECIAL_PREFIXES = ("fiberpart_", "contifiber", "metalcast_", "sealant_", "proto_")
+
 ENDUSE_IDS = {
     "PETG": "enduse_petg", "ABS": "enduse_abs", "PC": "enduse_pc",
     "PA": "enduse_pa6", "PP": "enduse_pp", "SBS": "enduse_sbs", "TPU": "enduse_tpu_d70",
@@ -134,10 +136,17 @@ def resolve_material_id(material_type, available_ids, prefer_enduse=False):
     for cid in candidates:
         if cid in available:
             return cid
+    needle = material_type.lower().replace("_", "")
     for cid in available_ids:
-        if material_type.lower().replace("_", "") in cid.lower().replace("_", ""):
+        if cid.startswith(SPECIAL_PREFIXES):
+            continue
+        if needle in cid.lower().replace("_", ""):
             return cid
     return None
+
+
+def is_special_material(material_id):
+    return material_id.startswith(SPECIAL_PREFIXES)
 
 
 def choose_mode(analysis, tags, machine_height_5d=231.1):

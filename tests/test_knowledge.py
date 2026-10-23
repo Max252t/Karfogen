@@ -81,6 +81,13 @@ class MaterialTest(unittest.TestCase):
         self.assertEqual(knowledge.resolve_material_id("PETG", available, prefer_enduse=True), "enduse_petg")
         self.assertIsNone(knowledge.resolve_material_id("PC", available))
 
+    def test_special_families_are_never_a_fallback(self):
+        available = ["fiberpart_pc_g20", "sealant_tpu93", "contifiber_cpa", "generic_pla"]
+        self.assertIsNone(knowledge.resolve_material_id("PC", available))
+        self.assertIsNone(knowledge.resolve_material_id("TPU", available))
+        self.assertTrue(knowledge.is_special_material("fiberpart_pc_g20"))
+        self.assertFalse(knowledge.is_special_material("enduse_pc"))
+
 
 class SettingsTest(unittest.TestCase):
     def test_load_bearing(self):

@@ -1,3 +1,4 @@
+from ..agent import knowledge
 from ..mcp.registry import get_registry, ToolError
 from .main_thread import run_on_main
 
@@ -316,8 +317,13 @@ def set_material(args):
         old = ext.material.getMetaDataEntry("base_file", "")
         _app().getMachineManager().setMaterialById(str(position), material_id)
         node = nodes[material_id]
-        return {"extruder": position, "old": old, "new": ext.material.getMetaDataEntry("base_file", ""),
-                "name": node.getMetaDataEntry("name", material_id)}
+        result = {"extruder": position, "old": old, "new": ext.material.getMetaDataEntry("base_file", ""),
+                  "name": node.getMetaDataEntry("name", material_id)}
+        if knowledge.is_special_material(material_id):
+            result["warning"] = ("%s is a special material (fiber-reinforced, flexible sealant, metal or proto line). "
+                                 "Use it only if the user asked for it; otherwise choose a generic or enduse material."
+                                 % material_id)
+        return result
     return run_on_main(work, _timeout=60)
 
 
