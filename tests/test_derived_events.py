@@ -1,6 +1,7 @@
 import unittest
 
 import support
+from AIAssistant import config
 from AIAssistant.mcp import protocol
 from AIAssistant.mcp.registry import ToolRegistry
 from AIAssistant.server.events import EventBus
@@ -28,6 +29,7 @@ def make_registry():
 
 class DerivedEventsTest(unittest.TestCase):
     def setUp(self):
+        config.set_value("language", "ru")
         self.bus = EventBus()
         self.registry = make_registry()
 

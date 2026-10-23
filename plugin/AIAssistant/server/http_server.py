@@ -14,7 +14,7 @@ from ..agent import knowledge, llm_client
 from ..agent.agent import get_agent
 from ..mcp import protocol
 from ..mcp.registry import get_registry
-from . import uploads
+from . import projects, uploads
 from .events import get_bus
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
@@ -96,7 +96,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._api_get(parsed)
             else:
                 self._static(parsed.path)
-        except ApiError as e:
+        except (ApiError, projects.ProjectError) as e:
             self._send_json({"error": str(e)}, e.status)
         except Exception as e:
             _log("e", traceback.format_exc())
@@ -114,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._api_post(path)
             else:
                 raise ApiError("Не найдено", 404)
-        except ApiError as e:
+        except (ApiError, projects.ProjectError) as e:
             self._send_json({"error": str(e)}, e.status)
         except Exception as e:
             _log("e", traceback.format_exc())
@@ -157,6 +157,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(get_bus().get_since(since, wait))
         elif parsed.path == "/api/settings":
             self._send_json(config.public_settings())
+        elif parsed.path == "/api/projects":
+            self._send_json(self._projects_state())
         elif parsed.path == "/api/state":
             self._send_json({"running": get_agent().is_running(), "tools": get_registry().names()})
         else:
@@ -169,12 +171,14 @@ class Handler(BaseHTTPRequestHandler):
             if not text:
                 raise ApiError("Пустое сообщение")
             attachment_ids = self._resolve_attachments(data.get("attachments") or [])
+            projects.get_manager().ensure_current()
             mode = data.get("mode")
             forced = mode if mode in knowledge.MODE_LABELS else None
             ok, status = get_agent().submit(text, attachment_ids, data.get("model_name"), forced)
             if not ok:
                 self._send_json({"ok": False, "error": status}, 409)
                 return
+            projects.get_manager().save_current()
             self._send_json({"ok": True})
         elif path == "/api/upload":
             try:
@@ -186,6 +190,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(config.update_settings(data))
         elif path == "/api/export":
             self._send_json(self._export(data))
+        elif path == "/api/projects":
+            self._send_json(self._projects_action(data))
+        elif path == "/api/choose_folder":
+            self._send_json(self._choose_folder(data))
         elif path == "/api/test_connection":
             try:
                 answer = llm_client.test_connection()
@@ -203,6 +211,36 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(self._save_screenshot(data))
         else:
             raise ApiError("Не найдено", 404)
+
+    def _projects_state(self):
+        manager = projects.get_manager()
+        return {"projects": projects.list_projects(), "current": manager.current()}
+
+    def _projects_action(self, data):
+        manager = projects.get_manager()
+        action = data.get("action")
+        if action == "create":
+            manager.create(data.get("name"))
+        elif action == "open":
+            manager.open(data.get("id"))
+        elif action == "rename":
+            projects.rename_project(data.get("id"), data.get("name"))
+        elif action == "delete":
+            manager.delete(data.get("id"))
+        else:
+            raise ApiError("Неизвестное действие")
+        return self._projects_state()
+
+    def _choose_folder(self, data):
+        from ..tools.main_thread import run_on_main
+
+        def dialog():
+            from PyQt5.QtWidgets import QFileDialog
+            start = data.get("start") or config.get_results_dir()
+            return QFileDialog.getExistingDirectory(None, "Папка результатов", start)
+
+        path = run_on_main(dialog, _timeout=600)
+        return {"path": path or None}
 
     def _resolve_attachments(self, items):
         ids = []
@@ -258,6 +296,7 @@ class AssistantServer(object):
     def start(self):
         if self._httpd is not None:
             return self.port
+        projects.get_manager().attach(get_agent(), get_bus())
         preferred = config.get("port")
         try:
             self._httpd = _Server(("127.0.0.1", preferred), Handler)
