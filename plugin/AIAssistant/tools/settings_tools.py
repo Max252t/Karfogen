@@ -424,7 +424,7 @@ def get_changed_settings(args):
     return run_on_main(work)
 
 
-@registry.tool("reset_settings", "Discard all user setting changes (profile defaults return). The print mode is kept; change it with set_print_mode.")
+@registry.tool("reset_settings", "Discard all user setting changes and any custom profile, returning to the standard profile of the same quality. The print mode is kept; change it with set_print_mode.")
 def reset_settings(args):
     def work():
         stack = _global_stack()
@@ -432,9 +432,13 @@ def reset_settings(args):
         stack.userChanges.clear()
         for ext in stack.extruders.values():
             ext.userChanges.clear()
+        mm = _app().getMachineManager()
+        had_custom_profile = bool(mm.activeQualityChangesGroup)
+        if mm.activeQualityGroup is not None:
+            mm.resetToUseDefaultQuality()
         if stack.getProperty("printing_mode", "value") != mode:
             stack.userChanges.setProperty("printing_mode", "value", mode)
-        return {"ok": True, "print_mode_kept": mode}
+        return {"ok": True, "print_mode_kept": mode, "custom_profile_dropped": had_custom_profile}
     return run_on_main(work)
 
 

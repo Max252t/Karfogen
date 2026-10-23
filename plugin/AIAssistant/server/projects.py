@@ -207,9 +207,21 @@ class ProjectManager(object):
         if self.agent is not None and self.agent.is_running():
             raise ProjectError("Ассистент занят, дождитесь ответа", 409)
 
+    def prepare_slicer(self):
+        from ..mcp import protocol
+        from ..mcp.registry import get_registry
+        registry = get_registry()
+        for name in ("clear_scene", "reset_settings"):
+            if registry.has(name):
+                try:
+                    protocol.call_tool(name, {}, registry, None)
+                except Exception:
+                    pass
+
     def ensure_current(self):
         with self._lock:
             if self.current() is None:
+                self.prepare_slicer()
                 self.current_id = create_project()["id"]
             return self.current_id
 
@@ -217,6 +229,7 @@ class ProjectManager(object):
         self._require_idle()
         with self._lock:
             self.save_current()
+            self.prepare_slicer()
             meta = create_project(name)
             self.current_id = meta["id"]
             self.agent.set_history([])

@@ -10,6 +10,7 @@ from ..server.events import get_bus
 from . import knowledge, llm_client, prompts
 
 MAX_TOOL_RESULT_CHARS = 8000
+LLM_EXCLUDED_TOOLS = set(["create_profile"])
 OLD_TOOL_RESULT_CHARS = 400
 MAX_HISTORY_CHARS = 120000
 
@@ -164,7 +165,7 @@ class Agent(object):
         return [{"role": "system", "content": prompts.system_prompt()}] + compact_history(self._history)
 
     def _loop(self, has_images, attachment_ids, model_name, text, forced_mode=None):
-        tools = self._registry.list_openai()
+        tools = [t for t in self._registry.list_openai() if t["function"]["name"] not in LLM_EXCLUDED_TOOLS]
         limit = config.get("max_iterations")
         for _ in range(limit):
             try:
