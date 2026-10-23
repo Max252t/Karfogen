@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import ssl
 import time
 import urllib.error
@@ -96,6 +97,8 @@ def chat(messages, tools=None, timeout=120, retries=2, extra=None):
             last_error = LLMError(_status_message(e.code, detail), e.code)
             if e.code < 500:
                 raise last_error
+        except socket.timeout:
+            raise LLMError("LLM не ответила за %d с" % timeout)
         except (urllib.error.URLError, OSError, ValueError) as e:
             last_error = LLMError("LLM недоступна: %s" % getattr(e, "reason", e))
         except LLMError:

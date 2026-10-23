@@ -72,6 +72,7 @@ class Agent(object):
         self._history = []
         self._lock = threading.Lock()
         self._running = False
+        self._cancel = threading.Event()
         self._thread = None
         self.on_finished = None
         self.on_progress = None
@@ -87,6 +88,14 @@ class Agent(object):
     def is_running(self):
         return self._running
 
+    def cancel(self):
+        with self._lock:
+            if not self._running:
+                return False
+            self._cancel.set()
+        self._status("Останавливаю")
+        return True
+
     def get_history(self):
         return list(self._history)
 
@@ -98,6 +107,7 @@ class Agent(object):
             if self._running:
                 return False, "Ассистент ещё обрабатывает предыдущее сообщение"
             self._running = True
+            self._cancel.clear()
         self._bus.publish("user_message", {"text": text, "attachments": list(attachment_ids or []),
                                            "model_name": model_name})
         self._thread = threading.Thread(target=self._run, args=(text, attachment_ids or [], model_name, forced_mode),
@@ -169,6 +179,9 @@ class Agent(object):
         tools = [t for t in self._registry.list_openai() if t["function"]["name"] not in LLM_EXCLUDED_TOOLS]
         limit = config.get("max_iterations")
         for _ in range(limit):
+            if self._cancel.is_set():
+                self._bus.publish("assistant_message", {"text": "Остановлено пользователем.", "intermediate": True})
+                return
             try:
                 reply = self._chat(self._messages(), tools)
             except llm_client.LLMError as e:
@@ -192,7 +205,11 @@ class Agent(object):
             if reply.get("content"):
                 self._bus.publish("assistant_message", {"text": reply["content"], "intermediate": True})
             for call in tool_calls:
-                self._history.append(self._execute(call))
+                if self._cancel.is_set():
+                    self._history.append({"role": "tool", "tool_call_id": call.get("id"),
+                                          "content": "Отменено пользователем"})
+                else:
+                    self._history.append(self._execute(call))
             if self.on_progress is not None:
                 try:
                     self.on_progress()

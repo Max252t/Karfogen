@@ -168,9 +168,9 @@ class Handler(BaseHTTPRequestHandler):
         data = self._read_json()
         if path == "/api/message":
             text = (data.get("text") or "").strip()
-            if not text:
-                raise ApiError("Пустое сообщение")
             attachment_ids = self._resolve_attachments(data.get("attachments") or [])
+            if not text and not attachment_ids:
+                raise ApiError("Пустое сообщение")
             projects.get_manager().ensure_current()
             mode = data.get("mode")
             forced = mode if mode in knowledge.MODE_LABELS else None
@@ -201,6 +201,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": False, "error": str(e)})
                 return
             self._send_json({"ok": True, "answer": answer})
+        elif path == "/api/cancel":
+            self._send_json({"ok": get_agent().cancel()})
         elif path == "/api/reset":
             if not get_agent().reset():
                 raise ApiError("Ассистент занят", 409)

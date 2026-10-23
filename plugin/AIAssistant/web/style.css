@@ -398,3 +398,5 @@ button:disabled { cursor: default; opacity: .5; }
   .project-item { flex-wrap: wrap; }
   .project-actions { width: 100%; justify-content: flex-end; }
 }
+
+.btn[hidden] { display: none; }
