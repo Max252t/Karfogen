@@ -109,7 +109,7 @@ class ManagerTest(unittest.TestCase):
         manager.open(second["id"])
         self.assertEqual(manager.agent.history[0]["content"], "Второй")
 
-    def test_new_project_prepares_slicer(self):
+    def test_explicit_new_project_prepares_slicer_but_first_message_does_not(self):
         from AIAssistant.mcp.registry import get_registry
         calls = []
         registry = get_registry()
@@ -117,11 +117,11 @@ class ManagerTest(unittest.TestCase):
         registry.register("reset_settings", "", {"type": "object", "properties": {}}, lambda a: calls.append("reset_settings") or {})
         manager = fresh_manager()
         manager.ensure_current()
-        self.assertEqual(calls, ["clear_scene", "reset_settings"])
+        self.assertEqual(calls, [])
         manager.create()
-        self.assertEqual(calls, ["clear_scene", "reset_settings"] * 2)
+        self.assertEqual(calls, ["clear_scene", "reset_settings"])
         manager.open(manager.current_id)
-        self.assertEqual(len(calls), 4)
+        self.assertEqual(len(calls), 2)
 
     def test_create_profile_is_hidden_from_llm(self):
         from AIAssistant.agent import agent as agent_module
