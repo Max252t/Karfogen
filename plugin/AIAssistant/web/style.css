@@ -355,3 +355,46 @@ button:disabled { cursor: default; opacity: .5; }
   .composer-hint { display: none; }
   .composer-bar { justify-content: space-between; }
 }
+
+.btn-small { padding: 3px 8px; font-size: 12px; }
+.chat-title .btn-small { flex: none; }
+.field select {
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+  border-radius: 3px; padding: 6px 8px; font: inherit; outline: 0;
+}
+.field select:focus { border-color: var(--focus); }
+.field-line { display: flex; gap: 8px; }
+.field-line input { flex: 1; min-width: 0; }
+.field .hint { margin: 0; }
+.modal { max-height: calc(100% - 32px); overflow: auto; }
+
+.projects-screen {
+  position: fixed; inset: 0; z-index: 40; background: var(--bg);
+  display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: 48px 16px;
+}
+.projects-screen[hidden] { display: none; }
+.projects-card {
+  width: min(680px, 100%); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: 20px;
+}
+.projects-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.projects-head h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.projects-foot { display: flex; justify-content: flex-end; margin-top: 16px; }
+.project-list { list-style: none; margin: 16px 0 0; padding: 0; border-top: 1px solid var(--border); }
+.project-item {
+  display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--border);
+}
+.project-item.current { background: var(--select); }
+.project-open {
+  flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 4px 8px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.project-open:hover .project-name { text-decoration: underline; }
+.project-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-meta { font-size: 12px; color: var(--text-dim); }
+.project-actions { display: flex; gap: 6px; flex: none; }
+.project-list .empty { padding: 20px 8px; }
+@media (max-width: 560px) {
+  .project-item { flex-wrap: wrap; }
+  .project-actions { width: 100%; justify-content: flex-end; }
+}
