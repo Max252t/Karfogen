@@ -20,6 +20,7 @@
 - Время и материал: `app.getPrintInformation()` (`currentPrintTime`, `materialWeights`, `materialLengths`, `materialNames`).
 - G-code: `app.getMeshFileHandler().getWriter("GCodeWriter").write(StringIO, None)`; данные берутся из `scene.gcode_dict`.
 - Проект 3MF: `app.getWorkspaceFileHandler().getWriter("3MFWriter").write(BytesIO, [root])` (пишет модели, стеки машины и экструдеров, предпочтения).
+- Потоки записи: `GCodeWriter._createSnapshot` и `ThreeMFWorkspaceWriter.write` обёрнуты в `call_on_qt_thread` (ставят вызов в очередь главного потока и ждут). Вызывать их из главного потока нельзя - взаимная блокировка, слайсер зависает. Экспорт выполняется из рабочего потока, как в `WriteFileJob`.
 - Загрузка модели: `app.readLocalFile(QUrl, skip_project_file_check)`; узел появляется асинхронно после `ReadMeshJob`.
 - Система координат сцены: Y вертикальна, Z к зрителю; в инструментах плагина используются координаты стола (x вправо, y назад, z вверх).
 - Settings: пользовательские изменения пишутся в `userChanges` глобального стека либо стека экструдера (если `settable_per_extruder`).
