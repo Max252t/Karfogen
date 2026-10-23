@@ -10,6 +10,8 @@ MAX_BYTES = 100 * 1024 * 1024
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 MODEL_EXTENSIONS = (".stl", ".obj", ".3mf")
 MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+MAX_IMAGE_SIDE = 1568
+MAX_RAW_IMAGE_BYTES = 5 * 1024 * 1024
 
 _lock = threading.Lock()
 _items = {}
@@ -53,8 +55,32 @@ def get_item(item_id):
     return _items.get(item_id)
 
 
+def _encode_with_qt(path):
+    from PyQt5.QtCore import QBuffer, QByteArray, QIODevice, Qt
+    from PyQt5.QtGui import QImage
+    image = QImage(path)
+    if image.isNull():
+        return None
+    if max(image.width(), image.height()) > MAX_IMAGE_SIDE:
+        image = image.scaled(MAX_IMAGE_SIDE, MAX_IMAGE_SIDE, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    fmt, mime = ("PNG", "image/png") if image.hasAlphaChannel() else ("JPEG", "image/jpeg")
+    data = QByteArray()
+    buffer = QBuffer(data)
+    buffer.open(QIODevice.WriteOnly)
+    if not image.save(buffer, fmt, 85):
+        return None
+    return mime, bytes(data)
+
+
 def image_data_url(item):
-    ext = os.path.splitext(item["path"])[1].lower()
-    with open(item["path"], "rb") as handle:
-        encoded = base64.b64encode(handle.read()).decode("ascii")
-    return "data:%s;base64,%s" % (MIME.get(ext, "image/png"), encoded)
+    try:
+        encoded = _encode_with_qt(item["path"])
+    except Exception:
+        encoded = None
+    if encoded is None:
+        if os.path.getsize(item["path"]) > MAX_RAW_IMAGE_BYTES:
+            return None
+        ext = os.path.splitext(item["path"])[1].lower()
+        with open(item["path"], "rb") as handle:
+            encoded = (MIME.get(ext, "image/png"), handle.read())
+    return "data:%s;base64,%s" % (encoded[0], base64.b64encode(encoded[1]).decode("ascii"))
