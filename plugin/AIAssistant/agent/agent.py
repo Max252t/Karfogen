@@ -154,13 +154,13 @@ class Agent(object):
         finally:
             self._status("Готово")
             self._bus.publish("done", {})
-            with self._lock:
-                self._running = False
             if self.on_finished is not None:
                 try:
                     self.on_finished()
                 except Exception:
                     _log("e", traceback.format_exc())
+            with self._lock:
+                self._running = False
 
     def _messages(self):
         return [{"role": "system", "content": prompts.system_prompt()}] + compact_history(self._history)

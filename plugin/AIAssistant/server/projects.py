@@ -70,6 +70,9 @@ def _trim_events(events):
     return result
 
 
+_write_lock = threading.RLock()
+
+
 def _log(level, text):
     try:
         from UM.Logger import Logger
@@ -95,20 +98,26 @@ def events_from_history(history):
 
 def _read(project_id):
     path = _file(project_id)
-    if not os.path.isfile(path):
-        raise ProjectError("Проект не найден", 404)
-    with open(path, "r", encoding="utf-8") as handle:
-        return json.load(handle)
+    with _write_lock:
+        if not os.path.isfile(path):
+            raise ProjectError("Проект не найден", 404)
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
 
 
 def _write(project):
-    folder = _dir(project["id"])
-    if not os.path.isdir(folder):
-        os.makedirs(folder)
-    tmp = _file(project["id"]) + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as handle:
-        json.dump(project, handle, ensure_ascii=False, default=str)
-    os.replace(tmp, _file(project["id"]))
+    with _write_lock:
+        folder = _dir(project["id"])
+        if not os.path.isdir(folder):
+            os.makedirs(folder)
+        tmp = "%s.%s.tmp" % (_file(project["id"]), uuid.uuid4().hex[:8])
+        try:
+            with open(tmp, "w", encoding="utf-8") as handle:
+                json.dump(project, handle, ensure_ascii=False, default=str)
+            os.replace(tmp, _file(project["id"]))
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
 
 
 def _meta(project):
