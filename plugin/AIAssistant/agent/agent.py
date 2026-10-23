@@ -74,6 +74,7 @@ class Agent(object):
         self._running = False
         self._thread = None
         self.on_finished = None
+        self.on_progress = None
 
     def reset(self):
         with self._lock:
@@ -192,6 +193,11 @@ class Agent(object):
                 self._bus.publish("assistant_message", {"text": reply["content"], "intermediate": True})
             for call in tool_calls:
                 self._history.append(self._execute(call))
+            if self.on_progress is not None:
+                try:
+                    self.on_progress()
+                except Exception:
+                    _log("e", traceback.format_exc())
         self._bus.publish("error", {"message": "Достигнут лимит шагов (%d). Уточните запрос или продолжите диалог." % limit})
 
     def _first_user_index(self):
