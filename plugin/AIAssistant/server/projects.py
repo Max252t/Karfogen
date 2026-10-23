@@ -164,16 +164,19 @@ def create_project(name=None):
 
 
 def rename_project(project_id, name):
-    project = _read(project_id)
-    project["name"] = _clean_name(name)
-    project["auto_named"] = False
-    _write(project)
-    return _meta(project)
+    clean = _clean_name(name)
+    with _write_lock:
+        project = _read(project_id)
+        project["name"] = clean
+        project["auto_named"] = False
+        _write(project)
+        return _meta(project)
 
 
 def delete_project(project_id):
-    _read(project_id)
-    shutil.rmtree(_dir(project_id))
+    with _write_lock:
+        _read(project_id)
+        shutil.rmtree(_dir(project_id))
 
 
 def load_project(project_id):
@@ -181,15 +184,19 @@ def load_project(project_id):
 
 
 def save_project(project_id, events, history, auto_name=None):
-    project = _read(project_id)
-    project["events"] = _trim_events(events)
-    project["history"] = _strip_images(history)
-    project["messages"] = len([m for m in history if m.get("role") == "user"])
-    project["updated"] = time.time()
-    if auto_name and project.get("auto_named"):
-        project["name"] = _clean_name(auto_name)
-    _write(project)
-    return _meta(project)
+    trimmed_events = _trim_events(events)
+    stripped_history = _strip_images(history)
+    messages = len([m for m in history if m.get("role") == "user"])
+    with _write_lock:
+        project = _read(project_id)
+        project["events"] = trimmed_events
+        project["history"] = stripped_history
+        project["messages"] = messages
+        project["updated"] = time.time()
+        if auto_name and project.get("auto_named"):
+            project["name"] = _clean_name(auto_name)
+        _write(project)
+        return _meta(project)
 
 
 def name_from_history(history):
