@@ -153,6 +153,8 @@ def _default_model_name():
 
 
 def _write_gcode(path):
+    if threading.current_thread() is threading.main_thread():
+        raise ToolError("Internal error: writers decorated with call_on_qt_thread must run outside the main thread")
     from UM.PluginRegistry import PluginRegistry
     app = _app()
     writer = app.getMeshFileHandler().getWriter("GCodeWriter")
@@ -176,15 +178,15 @@ def export_gcode(args):
     if _monitor.result != 3:
         raise ToolError("Slice the model first")
 
-    def work():
-        name = args.get("model_name") or _default_model_name()
-        path = os.path.join(config.get_model_dir(name), "result.gcode")
-        size = _write_gcode(path)
-        return {"path": path, "bytes": size, "model_name": name}
-    return run_on_main(work, _timeout=120)
+    name = args.get("model_name") or run_on_main(_default_model_name)
+    path = os.path.join(config.get_model_dir(name), "result.gcode")
+    size = _write_gcode(path)
+    return {"path": path, "bytes": size, "model_name": name}
 
 
 def _write_project(path):
+    if threading.current_thread() is threading.main_thread():
+        raise ToolError("Internal error: writers decorated with call_on_qt_thread must run outside the main thread")
     app = _app()
     writer = app.getWorkspaceFileHandler().getWriter("3MFWriter")
     if writer is None:
@@ -203,9 +205,7 @@ def _write_project(path):
                "Save the whole project (models with transforms, printer, material, profile and all setting changes) to <results>/<model_name>/project.3mf.",
                {"model_name": {"type": "string"}})
 def save_project_3mf(args):
-    def work():
-        name = args.get("model_name") or _default_model_name()
-        path = os.path.join(config.get_model_dir(name), "project.3mf")
-        size = _write_project(path)
-        return {"path": path, "bytes": size, "model_name": name}
-    return run_on_main(work, _timeout=120)
+    name = args.get("model_name") or run_on_main(_default_model_name)
+    path = os.path.join(config.get_model_dir(name), "project.3mf")
+    size = _write_project(path)
+    return {"path": path, "bytes": size, "model_name": name}
