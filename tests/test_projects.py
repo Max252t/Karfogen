@@ -127,6 +127,28 @@ class ManagerTest(unittest.TestCase):
         from AIAssistant.agent import agent as agent_module
         self.assertIn("create_profile", agent_module.LLM_EXCLUDED_TOOLS)
 
+    def test_concurrent_saves_do_not_collide(self):
+        import threading
+        manager = fresh_manager()
+        manager.ensure_current()
+        manager.agent.history = [{"role": "user", "content": "x"}]
+        errors = []
+
+        def work():
+            for _ in range(40):
+                try:
+                    projects.save_project(manager.current_id, manager.bus.snapshot(), manager.agent.get_history())
+                    projects.load_project(manager.current_id)
+                except Exception as e:
+                    errors.append(e)
+
+        threads = [threading.Thread(target=work) for _ in range(6)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+
     def test_busy_agent_blocks_switching(self):
         manager = fresh_manager()
         manager.ensure_current()
