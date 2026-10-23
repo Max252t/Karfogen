@@ -217,6 +217,23 @@ def _quality_groups():
     return app.getQualityManager().getQualityGroups(stack)
 
 
+def _layer_height(group, stack):
+    from UM.Settings.SettingFunction import SettingFunction
+    value = None
+    try:
+        node = group.node_for_global
+        container = node.getContainer() if node else None
+        if container is not None:
+            value = container.getProperty("layer_height", "value")
+        if isinstance(value, SettingFunction):
+            value = value(stack)
+        if value is None:
+            value = stack.definition.getProperty("layer_height", "default_value")
+        return round(float(value), 3)
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 @registry.tool("list_quality_profiles",
                "List quality profiles available for the current printer, material and print mode, with layer height. "
                "Choose one for set_quality_profile.")
@@ -225,18 +242,11 @@ def list_quality_profiles(args):
         groups = _quality_groups()
         mm = _app().getMachineManager()
         result = []
+        stack = _global_stack()
         for qtype, group in groups.items():
-            height = None
-            try:
-                node = group.node_for_global
-                container = node.getContainer() if node else None
-                if container is not None:
-                    height = _plain(container.getProperty("layer_height", "value"))
-            except Exception:
-                height = None
             result.append({"quality_type": qtype, "name": group.name,
-                           "available": bool(group.is_available), "layer_height": height})
-        result.sort(key=lambda r: (r["layer_height"] is None, r["layer_height"]))
+                           "available": bool(group.is_available), "layer_height": _layer_height(group, stack)})
+        result.sort(key=lambda r: (r["layer_height"] is None, r["layer_height"] or 0.0, r["quality_type"]))
         return {"active": mm.activeQualityType, "profiles": result}
     return run_on_main(work)
 
@@ -408,14 +418,17 @@ def get_changed_settings(args):
     return run_on_main(work)
 
 
-@registry.tool("reset_settings", "Discard all user setting changes (profile defaults return).")
+@registry.tool("reset_settings", "Discard all user setting changes (profile defaults return). The print mode is kept; change it with set_print_mode.")
 def reset_settings(args):
     def work():
         stack = _global_stack()
+        mode = stack.getProperty("printing_mode", "value")
         stack.userChanges.clear()
         for ext in stack.extruders.values():
             ext.userChanges.clear()
-        return {"ok": True}
+        if stack.getProperty("printing_mode", "value") != mode:
+            stack.userChanges.setProperty("printing_mode", "value", mode)
+        return {"ok": True, "print_mode_kept": mode}
     return run_on_main(work)
 
 

@@ -23,6 +23,7 @@ def _app():
 class SliceMonitor(object):
     def __init__(self):
         self.state = 1
+        self.result = None
         self.progress = 0.0
         self.finished = threading.Event()
         self.connected = set()
@@ -32,6 +33,7 @@ class SliceMonitor(object):
     def reset(self):
         with self.lock:
             self.state = 2
+            self.result = None
             self.progress = 0.0
             self.finished.clear()
 
@@ -39,7 +41,13 @@ class SliceMonitor(object):
         with self.lock:
             self.state = int(state)
             if self.state in (3, 4):
+                self.result = self.state
                 self.finished.set()
+            elif self.state == 2 and self.finished.is_set():
+                self.result = None
+                self.finished.clear()
+            elif self.state == 1 and self.result == 3:
+                self.result = None
         get_bus().publish("status", {"text": "slice_state", "state": STATE_NAMES.get(int(state), str(state))})
 
     def on_progress(self, progress):
@@ -112,7 +120,7 @@ def slice_scene(args):
     get_bus().publish("status", {"text": "slicing"})
     if not _monitor.finished.wait(SLICE_TIMEOUT):
         raise ToolError("Slicing did not finish within %d s (progress %d%%)" % (SLICE_TIMEOUT, int(_monitor.progress * 100)))
-    if _monitor.state == 4:
+    if _monitor.result == 4:
         raise ToolError("Slicing failed. Check that the model fits the build volume and settings are valid; see the slicer log.")
     deadline = time.time() + 8
     result = run_on_main(_print_info)
@@ -131,7 +139,7 @@ def get_slice_status(args):
 
 @registry.tool("get_slice_result", "Return print time and material use of the last slicing.")
 def get_slice_result(args):
-    if _monitor.state != 3:
+    if _monitor.result != 3:
         raise ToolError("No finished slicing. Call slice first.")
     return run_on_main(_print_info)
 
@@ -164,7 +172,7 @@ def _write_gcode(path):
                "Save the G-code of the last slicing to <results>/<model_name>/result.gcode. model_name defaults to the loaded file name.",
                {"model_name": {"type": "string"}})
 def export_gcode(args):
-    if _monitor.state != 3:
+    if _monitor.result != 3:
         raise ToolError("Slice the model first")
 
     def work():

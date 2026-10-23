@@ -10,6 +10,49 @@ from ..server.events import get_bus
 from . import llm_client, prompts
 
 MAX_TOOL_RESULT_CHARS = 8000
+OLD_TOOL_RESULT_CHARS = 400
+MAX_HISTORY_CHARS = 120000
+
+
+def _message_size(message):
+    content = message.get("content")
+    if isinstance(content, list):
+        size = sum(len(part.get("text", "")) for part in content if part.get("type") == "text")
+    else:
+        size = len(content or "")
+    return size + len(json.dumps(message.get("tool_calls") or [], ensure_ascii=False))
+
+
+def _compact_old(message):
+    role = message.get("role")
+    content = message.get("content")
+    if role == "tool" and content and len(content) > OLD_TOOL_RESULT_CHARS:
+        compact = dict(message)
+        compact["content"] = content[:OLD_TOOL_RESULT_CHARS] + "...[сокращено]"
+        return compact
+    if role == "user" and isinstance(content, list):
+        compact = dict(message)
+        texts = [part.get("text", "") for part in content if part.get("type") == "text"]
+        compact["content"] = "\n".join(texts) + "\n[изображения из прошлых сообщений опущены]"
+        return compact
+    return message
+
+
+def compact_history(history):
+    turns = []
+    for message in history:
+        if message.get("role") == "user" or not turns:
+            turns.append([])
+        turns[-1].append(message)
+    if not turns:
+        return []
+    old = [[_compact_old(m) for m in turn] for turn in turns[:-1]]
+    current = turns[-1]
+    total = sum(_message_size(m) for turn in old + [current] for m in turn)
+    while old and total > MAX_HISTORY_CHARS:
+        dropped = old.pop(0)
+        total -= sum(_message_size(m) for m in dropped)
+    return [m for turn in old for m in turn] + current
 
 
 def _log(level, text):
@@ -102,7 +145,7 @@ class Agent(object):
                 self._running = False
 
     def _messages(self):
-        return [{"role": "system", "content": prompts.system_prompt()}] + self._history
+        return [{"role": "system", "content": prompts.system_prompt()}] + compact_history(self._history)
 
     def _loop(self, has_images, attachment_ids, model_name, text):
         tools = self._registry.list_openai()

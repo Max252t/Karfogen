@@ -162,8 +162,10 @@ def choose_mode(analysis, tags, machine_height_5d=231.1):
         if tags & {"precision", "rotating", "wear", "load_bearing", "airtight"}:
             reasons.append("тело вращения (симметрия, ось %s, длина/диаметр=%.2f) с требованиями к точности/нагрузке: слои по окружности" % (sym.get("axis"), aspect))
             return "cylindrical_full", reasons
-    elif tags & {"precision", "rotating"} and sym.get("aspect", 0) >= 0.5 and "load_bearing" in tags:
-        reasons.append("вал/ось с нагрузкой на скручивание и точным профилем: 5D")
+    elif ({"rotating", "load_bearing", "precision"} <= tags and sym.get("aspect", 0) >= 0.5
+          and sym.get("lateral_area_ratio", 0) >= 0.5):
+        reasons.append("вал/ось: призматический профиль вдоль оси (боковая поверхность %.0f%%), вращение, "
+                       "нагрузка на скручивание и точный профиль: 5D" % (sym.get("lateral_area_ratio", 0) * 100))
         return "cylindrical_full", reasons
     reasons.append("нет признаков, требующих 5D")
     return "classic", reasons

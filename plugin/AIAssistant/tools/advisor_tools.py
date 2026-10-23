@@ -1,13 +1,25 @@
+import json
+
 from ..agent import knowledge
+from ..mcp import protocol
 from ..mcp.registry import get_registry, ToolError
+from ..server.events import get_bus
 
 registry = get_registry()
 
 FUNCTIONAL_TAGS = set(["load_bearing", "wear", "chemical", "high_temp", "rotating", "stiff", "airtight"])
 
 
-def _call(name, args=None):
-    return registry.call(name, args or {})
+def _call(name, args=None, applied=None):
+    result = protocol.call_tool(name, args or {}, registry, get_bus())
+    text = "".join(part.get("text", "") for part in result["content"])
+    if result["isError"]:
+        if applied is None:
+            raise ToolError("%s failed: %s" % (name, text))
+        raise ToolError("%s failed: %s. Already applied: %s" % (name, text, ", ".join(applied) or "nothing"))
+    if applied is not None:
+        applied.append(name)
+    return json.loads(text)
 
 
 def _clean_tags(tags):
@@ -21,15 +33,17 @@ def _clean_tags(tags):
 
 
 def _pick_quality(wanted, profiles):
-    available = [p for p in profiles if p["available"] and p["layer_height"] is not None]
+    available = [p for p in profiles if p["available"]]
     for p in available:
         if p["quality_type"] == wanted:
             return p["quality_type"]
     target = knowledge.QUALITY_LAYER_HEIGHT.get(wanted)
-    if target is None or not available:
+    numeric = [p for p in available
+               if isinstance(p["layer_height"], (int, float)) and not isinstance(p["layer_height"], bool)]
+    if target is None or not numeric:
         return None
-    available.sort(key=lambda p: abs(p["layer_height"] - target))
-    return available[0]["quality_type"]
+    numeric.sort(key=lambda p: (abs(p["layer_height"] - target), p["layer_height"]))
+    return numeric[0]["quality_type"]
 
 
 @registry.tool("recommend_setup",
@@ -89,20 +103,22 @@ def recommend_setup(args):
     if not args.get("apply"):
         return plan
 
-    _call("select_machine", {})
-    _call("set_print_mode", {"mode": mode})
+    applied = []
+    _call("select_machine", {}, applied)
+    _call("set_print_mode", {"mode": mode}, applied)
     if mode == "classic":
-        _call("suggest_orientation", {"object_id": object_id, "goal": orientation_goal, "apply": True})
+        _call("suggest_orientation", {"object_id": object_id, "goal": orientation_goal, "apply": True}, applied)
     else:
-        _call("align_symmetry_axis", {"object_id": object_id})
-        _call("move_object", {"object_id": object_id, "x": 0, "y": 0})
-    _call("set_material", {"material_id": material_id})
+        _call("align_symmetry_axis", {"object_id": object_id}, applied)
+        _call("move_object", {"object_id": object_id, "x": 0, "y": 0}, applied)
+    _call("set_material", {"material_id": material_id}, applied)
     profiles_after = _call("list_quality_profiles", {})["profiles"]
     quality = _pick_quality(wanted_quality, profiles_after) or quality
-    _call("set_quality_profile", {"quality_type": quality})
+    _call("set_quality_profile", {"quality_type": quality}, applied)
     plan["quality_type"] = quality
-    outcome = _call("set_settings", {"changes": [{"key": k, "value": v} for k, v in settings.items()]})
+    outcome = _call("set_settings", {"changes": [{"key": k, "value": v} for k, v in settings.items()]}, applied)
     plan["applied"] = True
+    plan["applied_steps"] = applied
     plan["apply_result"] = outcome
     plan["size_after"] = _call("get_object_bounds", {"object_id": object_id})
     return plan

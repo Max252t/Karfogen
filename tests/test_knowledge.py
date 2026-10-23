@@ -36,7 +36,21 @@ class ModeTest(unittest.TestCase):
 
     def test_shaft_with_torque_is_5d(self):
         analysis = sym(False, 0.64)
-        self.assertEqual(knowledge.choose_mode(analysis, ["precision", "load_bearing"])[0], "cylindrical_full")
+        analysis["axisymmetry"]["lateral_area_ratio"] = 0.63
+        tags = ["precision", "load_bearing", "rotating"]
+        self.assertEqual(knowledge.choose_mode(analysis, tags)[0], "cylindrical_full")
+
+    def test_loaded_precise_bracket_stays_3d(self):
+        analysis = sym(False, 0.8)
+        analysis["axisymmetry"]["lateral_area_ratio"] = 0.7
+        tags = ["load_bearing", "precision", "no_supports"]
+        self.assertEqual(knowledge.choose_mode(analysis, tags)[0], "classic")
+
+    def test_rotating_part_without_prismatic_profile_stays_3d(self):
+        analysis = sym(False, 0.8)
+        analysis["axisymmetry"]["lateral_area_ratio"] = 0.2
+        tags = ["load_bearing", "precision", "rotating"]
+        self.assertEqual(knowledge.choose_mode(analysis, tags)[0], "classic")
 
     def test_no_requirements_is_3d(self):
         self.assertEqual(knowledge.choose_mode(sym(True, 0.5), [])[0], "classic")
