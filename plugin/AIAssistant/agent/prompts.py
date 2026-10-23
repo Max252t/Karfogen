@@ -24,5 +24,12 @@ SYSTEM_PROMPT = """Ты - инженер аддитивного производ
 """ + knowledge.build_prompt_rules()
 
 
+BRIEF_NOTE = ("\n\nПользователь отключил подробные объяснения: в финальном ответе дай краткую сводку результата "
+              "без развёрнутых причин.")
+
+
 def system_prompt():
-    return SYSTEM_PROMPT
+    from .. import config
+    if config.get("explain"):
+        return SYSTEM_PROMPT
+    return SYSTEM_PROMPT + BRIEF_NOTE

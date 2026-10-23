@@ -10,6 +10,7 @@ DEFAULTS = {
     "port": 8765,
     "verify_ssl": True,
     "max_iterations": 25,
+    "explain": True,
 }
 
 ENV_NAMES = {
@@ -90,6 +91,8 @@ def public_settings():
         "model": get("model"),
         "api_key": mask_key(get("api_key")),
         "api_key_set": bool(get("api_key")),
+        "has_key": bool(get("api_key")),
+        "explain": get("explain"),
         "results_dir": get_results_dir(),
         "port": get("port"),
         "verify_ssl": get("verify_ssl"),
@@ -97,7 +100,7 @@ def public_settings():
 
 
 def update_settings(data):
-    for key in ("base_url", "model", "results_dir", "port", "verify_ssl"):
+    for key in ("base_url", "model", "results_dir", "port", "verify_ssl", "explain"):
         if key in data:
             set_value(key, data[key])
     key = data.get("api_key")

@@ -16,3 +16,6 @@ def install_package():
 
 
 install_package()
+
+for _name in [n for n in os.environ if n.startswith("AI_ASSISTANT_")]:
+    del os.environ[_name]

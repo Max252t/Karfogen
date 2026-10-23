@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
 
 from .. import config
-from ..agent import llm_client
+from ..agent import knowledge, llm_client
 from ..agent.agent import get_agent
 from ..mcp import protocol
 from ..mcp.registry import get_registry
@@ -168,7 +168,10 @@ class Handler(BaseHTTPRequestHandler):
             text = (data.get("text") or "").strip()
             if not text:
                 raise ApiError("Пустое сообщение")
-            ok, status = get_agent().submit(text, data.get("attachments") or [], data.get("model_name"))
+            attachment_ids = self._resolve_attachments(data.get("attachments") or [])
+            mode = data.get("mode")
+            forced = mode if mode in knowledge.MODE_LABELS else None
+            ok, status = get_agent().submit(text, attachment_ids, data.get("model_name"), forced)
             if not ok:
                 self._send_json({"ok": False, "error": status}, 409)
                 return
@@ -181,6 +184,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"id": item["id"], "name": item["name"], "kind": item["kind"], "path": item["path"]})
         elif path == "/api/settings":
             self._send_json(config.update_settings(data))
+        elif path == "/api/export":
+            self._send_json(self._export(data))
         elif path == "/api/test_connection":
             try:
                 answer = llm_client.test_connection()
@@ -198,6 +203,31 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(self._save_screenshot(data))
         else:
             raise ApiError("Не найдено", 404)
+
+    def _resolve_attachments(self, items):
+        ids = []
+        for item in items:
+            if isinstance(item, str):
+                ids.append(item)
+            elif isinstance(item, dict):
+                try:
+                    saved = uploads.save_upload(item.get("name", ""), item.get("data") or item.get("data_base64") or "")
+                except uploads.UploadError as e:
+                    raise ApiError(str(e))
+                ids.append(saved["id"])
+        return ids
+
+    def _export(self, data):
+        tools = {"gcode": "export_gcode", "3mf": "save_project_3mf"}
+        name = tools.get(data.get("kind"))
+        if name is None:
+            raise ApiError("kind должен быть gcode или 3mf")
+        args = {"model_name": data["model_name"]} if data.get("model_name") else {}
+        result = protocol.call_tool(name, args, get_registry(), get_bus())
+        text = "".join(part.get("text", "") for part in result["content"])
+        if result["isError"]:
+            raise ApiError(text, 409)
+        return json.loads(text)
 
     def _save_screenshot(self, data):
         name = data.get("model_name")

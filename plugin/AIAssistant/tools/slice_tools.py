@@ -53,7 +53,8 @@ class SliceMonitor(object):
     def on_progress(self, progress):
         with self.lock:
             self.progress = float(progress)
-        get_bus().publish("slice_progress", {"percent": int(round(float(progress) * 100))})
+        get_bus().publish("slice_progress", {"state": "slicing", "progress": float(progress),
+                                             "percent": int(round(float(progress) * 100))})
 
     def _guard(self, backend, handler):
         def wrapper(value):
