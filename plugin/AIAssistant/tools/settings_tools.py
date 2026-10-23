@@ -105,7 +105,14 @@ def _target_stacks(stack, key, extruder):
     return [("extruder %s" % position, ext)]
 
 
+def check_key_allowed(key):
+    low = str(key or "").lower()
+    if low.startswith("machine_") or "gcode" in low:
+        raise ToolError("Setting '%s' is protected and cannot be changed by the assistant" % key)
+
+
 def _apply_setting(key, value, extruder):
+    check_key_allowed(key)
     stack = _global_stack()
     converted = _convert_value(stack, key, value)
     changes = []

@@ -19,7 +19,7 @@
   var t = function () { return I18N.t.apply(null, arguments); };
   var els = {
     messages: $("messages"), welcome: $("welcome"), composer: $("composer"),
-    input: $("input"), sendBtn: $("sendBtn"), fileInput: $("fileInput"),
+    input: $("input"), sendBtn: $("sendBtn"), stopBtn: $("stopBtn"), fileInput: $("fileInput"),
     attachments: $("attachments"), objects: $("objects"), changes: $("changes"),
     changeCount: $("changeCount"), sliceCard: $("sliceCard"), sliceState: $("sliceState"),
     slicePct: $("slicePct"), sliceBar: $("sliceBar"), toast: $("toast"),
@@ -308,6 +308,8 @@
   function setBusy(on) {
     state.busy = on;
     els.sendBtn.disabled = on;
+    els.stopBtn.hidden = !on || state.demo;
+    els.stopBtn.disabled = false;
     if (!on) state.assistantBubble = null;
   }
 
@@ -345,7 +347,14 @@
       text: text,
       mode: state.modeFixed ? state.mode : undefined,
       attachments: files.map(function (f) { return { name: f.name, mime: f.mime, data: f.data }; })
-    }).catch(function () {
+    }).catch(function (err) {
+      if (err && err.status) {
+        state.localUser = Math.max(0, state.localUser - 1);
+        showTyping(false);
+        if (err.status !== 409) setBusy(false);
+        toast(err.status === 409 ? t("busy") : err.message);
+        return;
+      }
       state.demo = true;
       toast(t("demo_toast"));
       runDemo(text, files);
@@ -462,6 +471,11 @@
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(els.input.value); }
   });
   els.composer.addEventListener("submit", function (e) { e.preventDefault(); send(els.input.value); });
+  els.stopBtn.addEventListener("click", function () {
+    els.stopBtn.disabled = true;
+    toast(t("stopping"));
+    api("/api/cancel", {}).catch(function () { els.stopBtn.disabled = false; });
+  });
   els.fileInput.addEventListener("change", function () { addFiles(this.files); this.value = ""; });
 
   ["dragenter", "dragover"].forEach(function (t) {

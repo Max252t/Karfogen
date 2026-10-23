@@ -255,7 +255,6 @@ class ProjectManager(object):
     def ensure_current(self):
         with self._lock:
             if self.current() is None:
-                self.prepare_slicer()
                 self.current_id = create_project()["id"]
             return self.current_id
 
