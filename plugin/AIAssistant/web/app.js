@@ -553,7 +553,10 @@
         (isCurrent ? " · " + esc(t("current")) : "") + "</span></button>" +
         '<span class="project-actions"><button type="button" class="btn btn-small" data-act="rename">' + esc(t("rename")) +
         '</button><button type="button" class="btn btn-small" data-act="delete">' + esc(t("delete")) + "</button></span>";
-      li.querySelector(".project-open").addEventListener("click", function () { projectAction({ action: "open", id: p.id }, true); });
+      li.querySelector(".project-open").addEventListener("click", function () {
+        if (isCurrent) { showProjects(false); return; }
+        projectAction({ action: "open", id: p.id }, true);
+      });
       li.querySelector('[data-act="rename"]').addEventListener("click", function () { askRename(p); });
       li.querySelector('[data-act="delete"]').addEventListener("click", function () {
         if (!window.confirm(t("delete_confirm", p.name))) return;

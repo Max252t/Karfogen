@@ -237,6 +237,8 @@ class ProjectManager(object):
             return meta
 
     def open(self, project_id):
+        if project_id == self.current_id and self.current() is not None:
+            return self.current()
         self._require_idle()
         with self._lock:
             if project_id != self.current_id:
@@ -248,7 +250,8 @@ class ProjectManager(object):
             return _meta(project)
 
     def delete(self, project_id):
-        self._require_idle()
+        if project_id == self.current_id:
+            self._require_idle()
         with self._lock:
             delete_project(project_id)
             if self.current_id == project_id:

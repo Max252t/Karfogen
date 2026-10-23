@@ -135,6 +135,26 @@ class ManagerTest(unittest.TestCase):
             manager.create()
         self.assertEqual(ctx.exception.status, 409)
 
+    def test_current_project_opens_while_agent_runs(self):
+        manager = fresh_manager()
+        manager.ensure_current()
+        current = manager.current_id
+        manager.agent.running = True
+        self.assertEqual(manager.open(current)["id"], current)
+        other = projects.create_project("Другой")
+        with self.assertRaises(projects.ProjectError):
+            manager.open(other["id"])
+
+    def test_other_project_can_be_deleted_while_agent_runs(self):
+        manager = fresh_manager()
+        manager.ensure_current()
+        other = projects.create_project("Лишний")
+        manager.agent.running = True
+        manager.delete(other["id"])
+        self.assertEqual([p["id"] for p in projects.list_projects()], [manager.current_id])
+        with self.assertRaises(projects.ProjectError):
+            manager.delete(manager.current_id)
+
     def test_delete_current_clears_state(self):
         manager = fresh_manager()
         manager.ensure_current()
