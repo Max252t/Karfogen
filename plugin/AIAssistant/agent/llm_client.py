@@ -1,4 +1,5 @@
 import json
+import os
 import ssl
 import time
 import urllib.error
@@ -13,16 +14,31 @@ class LLMError(Exception):
         self.status = status
 
 
+CERTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "certs")
+
+
+def _certifi_bundle():
+    try:
+        import certifi
+        path = certifi.where()
+        return path if os.path.isfile(path) else None
+    except Exception:
+        return None
+
+
 def _ssl_context():
-    if config.get("verify_ssl"):
-        try:
-            import certifi
-            return ssl.create_default_context(cafile=certifi.where())
-        except Exception:
-            return ssl.create_default_context()
     context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
+    if not config.get("verify_ssl"):
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        return context
+    bundle = _certifi_bundle()
+    if bundle:
+        context.load_verify_locations(cafile=bundle)
+    if os.path.isdir(CERTS_DIR):
+        for name in sorted(os.listdir(CERTS_DIR)):
+            if name.endswith(".pem"):
+                context.load_verify_locations(cafile=os.path.join(CERTS_DIR, name))
     return context
 
 
