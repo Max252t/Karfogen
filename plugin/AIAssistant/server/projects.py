@@ -10,6 +10,7 @@ from .. import config
 
 MAX_NAME = 80
 MAX_RESULT_CHARS = 20000
+AUTOSAVE_INTERVAL = 5
 DEFAULT_NAMES = ("Новый проект", "New project")
 
 
@@ -69,6 +70,29 @@ def _trim_events(events):
     return result
 
 
+def _log(level, text):
+    try:
+        from UM.Logger import Logger
+        Logger.log(level, "AIAssistant: " + text)
+    except Exception:
+        pass
+
+
+def events_from_history(history):
+    events = []
+    for index, message in enumerate(history):
+        role = message.get("role")
+        content = message.get("content")
+        if isinstance(content, list):
+            content = " ".join(p.get("text", "") for p in content if p.get("type") == "text")
+        if role == "user" and content:
+            text = content.split("\n\n")[0]
+            events.append({"id": len(events) + 1, "ts": 0, "type": "user_message", "data": {"text": text}})
+        elif role == "assistant" and content:
+            events.append({"id": len(events) + 1, "ts": 0, "type": "assistant_message", "data": {"text": content}})
+    return events
+
+
 def _read(project_id):
     path = _file(project_id)
     if not os.path.isfile(path):
@@ -83,7 +107,7 @@ def _write(project):
         os.makedirs(folder)
     tmp = _file(project["id"]) + ".tmp"
     with open(tmp, "w", encoding="utf-8") as handle:
-        json.dump(project, handle, ensure_ascii=False)
+        json.dump(project, handle, ensure_ascii=False, default=str)
     os.replace(tmp, _file(project["id"]))
 
 
@@ -193,6 +217,7 @@ class ProjectManager(object):
         self.agent = agent
         self.bus = bus
         agent.on_finished = self.save_current
+        agent.on_progress = self.autosave
 
     def current(self):
         if self.current_id is None:
@@ -245,8 +270,12 @@ class ProjectManager(object):
                 self.save_current()
             project = load_project(project_id)
             self.current_id = project_id
-            self.agent.set_history(project.get("history", []))
-            self.bus.load(project.get("events", []))
+            history = project.get("history", [])
+            events = project.get("events", [])
+            if not events and history:
+                events = events_from_history(history)
+            self.agent.set_history(history)
+            self.bus.load(events)
             return _meta(project)
 
     def delete(self, project_id):
@@ -265,8 +294,13 @@ class ProjectManager(object):
         history = self.agent.get_history()
         try:
             save_project(self.current_id, self.bus.snapshot(), history, name_from_history(history))
-        except (ProjectError, OSError):
-            pass
+            self._last_autosave = time.time()
+        except Exception as e:
+            _log("e", "could not save project %s: %s" % (self.current_id, e))
+
+    def autosave(self):
+        if time.time() - getattr(self, "_last_autosave", 0) >= AUTOSAVE_INTERVAL:
+            self.save_current()
 
 
 _manager = ProjectManager()
