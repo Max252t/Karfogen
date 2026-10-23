@@ -86,17 +86,17 @@ def candidate_down_vectors(tris, max_face_candidates=12, data=None):
 
     total = float(areas.sum())
     if total > 0:
-        keys = numpy.round(normals, 2)
-        buckets = {}
-        for key, area, normal in zip(map(tuple, keys), areas, normals):
-            entry = buckets.setdefault(key, [0.0, normal])
-            entry[0] += area
-        ranked = sorted(buckets.values(), key=lambda e: -e[0])
+        quantized = numpy.round(normals * 100).astype(numpy.int64) + 100
+        codes = (quantized[:, 0] * 201 + quantized[:, 1]) * 201 + quantized[:, 2]
+        unique_codes, first_index, inverse = numpy.unique(codes, return_index=True, return_inverse=True)
+        bucket_areas = numpy.bincount(inverse.ravel(), weights=areas, minlength=len(unique_codes))
+        order = numpy.argsort(-bucket_areas)
         taken = 0
-        for area, normal in ranked:
+        for bucket in order:
+            area = float(bucket_areas[bucket])
             if taken >= max_face_candidates or area < 0.01 * total:
                 break
-            add(normal, "face")
+            add(normals[first_index[bucket]], "face")
             taken += 1
     return candidates
 
@@ -190,6 +190,7 @@ def axisymmetry(tris, data=None):
         rlen = numpy.where(rlen > 1e-9, rlen, 1.0)
         radial_component = (nr_u * ru + nr_v * rv) / rlen
         inward = float(areas[radial_component < -0.7].sum()) / total
+        lateral = float(areas[numpy.abs(normals[:, axis]) < 0.1].sum()) / total
         info = {
             "axis": "xyz"[axis],
             "axis_index": axis,
@@ -199,6 +200,7 @@ def axisymmetry(tris, data=None):
             "length_mm": round(length, 2),
             "aspect": round(length / (2 * radius), 3) if radius > 0 else 0.0,
             "inward_area_ratio": round(inward, 4),
+            "lateral_area_ratio": round(lateral, 4),
             "center": [round(c0, 2), round(c1, 2)],
         }
         if best is None or info["symmetry_error"] < best["symmetry_error"]:

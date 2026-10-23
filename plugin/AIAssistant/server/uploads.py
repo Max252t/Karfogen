@@ -1,8 +1,8 @@
 import base64
 import binascii
-import itertools
 import os
 import threading
+import uuid
 
 from .. import config
 
@@ -12,7 +12,6 @@ MODEL_EXTENSIONS = (".stl", ".obj", ".3mf")
 MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
 
 _lock = threading.Lock()
-_counter = itertools.count(1)
 _items = {}
 
 
@@ -39,10 +38,9 @@ def save_upload(name, data_base64):
     if len(data) > MAX_BYTES:
         raise UploadError("Файл больше 100 МБ")
     with _lock:
-        number = next(_counter)
-        item_id = "f%d" % number
+        item_id = "f" + uuid.uuid4().hex[:12]
         folder = os.path.join(config.get_uploads_dir(), item_id)
-        os.makedirs(folder)
+        os.makedirs(folder, exist_ok=True)
         path = os.path.join(folder, config.safe_name(name))
         with open(path, "wb") as handle:
             handle.write(data)

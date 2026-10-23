@@ -19,6 +19,9 @@ def run_on_main(func, *args, **kwargs):
     box = {}
 
     def wrapper():
+        if box.get("cancelled"):
+            done.set()
+            return
         try:
             box["result"] = func(*args, **kwargs)
         except Exception as e:
@@ -28,6 +31,7 @@ def run_on_main(func, *args, **kwargs):
 
     app.callLater(wrapper)
     if not done.wait(timeout):
+        box["cancelled"] = True
         raise MainThreadTimeout("Main thread did not respond in %s s" % timeout)
     if "error" in box:
         raise box["error"]
