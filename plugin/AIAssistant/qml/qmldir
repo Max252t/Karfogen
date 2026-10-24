@@ -1,0 +1,20 @@
+singleton Style 1.0 Style.qml
+AButton 1.0 AButton.qml
+IconButton 1.0 IconButton.qml
+Spinner 1.0 Spinner.qml
+Toast 1.0 Toast.qml
+SectionTitle 1.0 SectionTitle.qml
+Card 1.0 Card.qml
+KeyValue 1.0 KeyValue.qml
+HeaderBar 1.0 HeaderBar.qml
+RunBar 1.0 RunBar.qml
+TabBar 1.0 TabBar.qml
+ChatPage 1.0 ChatPage.qml
+MessageDelegate 1.0 MessageDelegate.qml
+Composer 1.0 Composer.qml
+ResultPage 1.0 ResultPage.qml
+ProjectsPage 1.0 ProjectsPage.qml
+SettingsDialog 1.0 SettingsDialog.qml
+ConfirmDialog 1.0 ConfirmDialog.qml
+RenameDialog 1.0 RenameDialog.qml
+CheckRow 1.0 CheckRow.qml
