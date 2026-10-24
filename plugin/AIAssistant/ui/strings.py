@@ -183,7 +183,6 @@ RU = {
     "res_save_gcode": "Сохранить G-code",
     "res_save_3mf": "Сохранить 3MF",
     "res_open_folder": "Открыть папку",
-    "res_screenshot": "Сохранить скриншот чата",
     "res_saved_to": "Сохранено: %s",
     "res_export_hint": "Сначала нарежьте модель — попросите ассистента или нажмите «Нарезать» в слайсере.",
     "res_reset": "Сбросить изменения настроек",
@@ -230,7 +229,7 @@ RU = {
     "set_explain": "Подробно объяснять выбор параметров",
     "set_auto_export": "Автоматически сохранять G-code и 3MF после слайсинга",
     "set_results": "Папка результатов",
-    "set_results_hint": "Сюда сохраняются G-code, 3MF, скриншоты и проекты.",
+    "set_results_hint": "Сюда сохраняются G-code, 3MF и проекты.",
     "set_browse": "Обзор…",
     "set_language": "Язык ассистента",
     "set_lang_auto": "Как в слайсере",
@@ -240,8 +239,6 @@ RU = {
     "set_saved": "Настройки сохранены",
 
     "toast_export": "Сохранено: %s",
-    "toast_screenshot": "Скриншот сохранён: %s",
-    "toast_screenshot_fail": "Не удалось сохранить скриншот",
     "toast_folder_fail": "Не удалось открыть папку",
     "toast_file_added": "Прикреплено: %s",
 
@@ -600,7 +597,6 @@ EN = {
     "res_save_gcode": "Save G-code",
     "res_save_3mf": "Save 3MF",
     "res_open_folder": "Open folder",
-    "res_screenshot": "Save chat screenshot",
     "res_saved_to": "Saved: %s",
     "res_export_hint": "Slice the model first — ask the assistant or press Slice in the slicer.",
     "res_reset": "Reset setting changes",
@@ -647,7 +643,7 @@ EN = {
     "set_explain": "Explain the chosen settings in detail",
     "set_auto_export": "Save G-code and 3MF automatically after slicing",
     "set_results": "Results folder",
-    "set_results_hint": "G-code, 3MF, screenshots and projects are saved here.",
+    "set_results_hint": "G-code, 3MF and projects are saved here.",
     "set_browse": "Browse…",
     "set_language": "Assistant language",
     "set_lang_auto": "Same as the slicer",
@@ -657,8 +653,6 @@ EN = {
     "set_saved": "Settings saved",
 
     "toast_export": "Saved: %s",
-    "toast_screenshot": "Screenshot saved: %s",
-    "toast_screenshot_fail": "Couldn't save the screenshot",
     "toast_folder_fail": "Couldn't open the folder",
     "toast_file_added": "Attached: %s",
 

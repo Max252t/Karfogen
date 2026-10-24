@@ -99,10 +99,6 @@ class LoadQmlTest(unittest.TestCase):
             window.show()
             self.pump(app)
             self.assertEqual(controller.messageModel.items(), before)
-            screenshot = controller.saveScreenshot()
-            self.assertTrue(os.path.isfile(screenshot))
-            with open(screenshot, "rb") as handle:
-                self.assertEqual(handle.read(8), b"\x89PNG\r\n\x1a\n")
         finally:
             for item in app.topLevelWindows():
                 item.close()

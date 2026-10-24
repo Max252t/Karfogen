@@ -1,5 +1,4 @@
 import os
-import re
 import threading
 import time
 import traceback
@@ -117,11 +116,6 @@ def url_to_path(value):
 
 def current_language():
     return config.effective_language()
-
-
-def next_screenshot_path(folder):
-    numbers = [int(m.group(1)) for m in (re.match(r"chat_(\d+)\.png$", f) for f in os.listdir(folder)) if m]
-    return os.path.join(folder, "chat_%d.png" % ((max(numbers) + 1) if numbers else 1))
 
 
 class NativeChatController(QObject):
@@ -1044,34 +1038,33 @@ class NativeChatController(QObject):
             return False
         return True
 
-    def _screenshot_name(self):
-        for kind in ("gcode", "3mf"):
-            path = self._state.exports.get(kind)
-            if path:
-                return os.path.basename(os.path.dirname(path))
-        objects = self._scene_objects
-        if objects:
-            return os.path.splitext(objects[0]["name"])[0]
-        meta = self._project_meta
-        return meta["name"] if meta else "chat"
-
-    @pyqtSlot(result=str)
-    def saveScreenshot(self):
-        if self._window is None:
-            self._notify("error", self.t("toast_screenshot_fail"))
-            return ""
+    @pyqtProperty("QVariantMap", constant=True)
+    def windowGeometry(self):
+        parts = str(config.get("window_geometry") or "").split(",")
         try:
-            image = self._window.grabWindow()
-            folder = config.get_model_dir(self._screenshot_name())
-            path = next_screenshot_path(folder)
-            if image.isNull() or not image.save(path, "PNG"):
-                raise IOError("grab failed")
-        except Exception as e:
-            _log("e", "screenshot failed: %s" % e)
-            self._notify("error", self.t("toast_screenshot_fail"))
-            return ""
-        self._notify("success", self.t("toast_screenshot", path))
-        return path
+            x, y, w, h = [int(float(p)) for p in parts]
+        except ValueError:
+            return {}
+        if w < 200 or h < 200:
+            return {}
+        result = {"width": w, "height": h}
+        if self._point_visible(x + 40, y + 20):
+            result.update({"x": x, "y": y})
+        return result
+
+    def _point_visible(self, x, y):
+        try:
+            from PyQt5.QtCore import QPoint
+            from PyQt5.QtGui import QGuiApplication
+            screens = QGuiApplication.screens()
+        except Exception:
+            return False
+        return any(screen.availableGeometry().contains(QPoint(x, y)) for screen in screens)
+
+    @pyqtSlot(int, int, int, int)
+    def saveGeometry(self, x, y, width, height):
+        if width >= 200 and height >= 200:
+            config.set_value("window_geometry", "%d,%d,%d,%d" % (x, y, width, height))
 
     @pyqtSlot()
     def windowShown(self):
