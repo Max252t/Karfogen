@@ -155,6 +155,47 @@ def _score(m, goal):
     return m["overhang_ratio"] * 60.0 + m["height_mm"] * 0.03 - base_ratio * 20.0
 
 
+HARMONICS = tuple(range(1, 9))
+WORLD_AXIS_TOLERANCE = 0.999
+SYMMETRY_THRESHOLD = 0.08
+
+
+def _candidate_axes(centroids, areas, total):
+    axes = []
+    for index in range(3):
+        vec = numpy.zeros(3)
+        vec[index] = 1.0
+        axes.append((vec, index))
+    mean = (centroids * areas[:, None]).sum(axis=0) / total
+    delta = centroids - mean
+    cov = (delta * areas[:, None]).T.dot(delta) / total
+    try:
+        _, vectors = numpy.linalg.eigh(cov)
+    except numpy.linalg.LinAlgError:
+        return axes
+    for column in range(3):
+        vec = vectors[:, column]
+        norm = numpy.linalg.norm(vec)
+        if norm < 1e-9:
+            continue
+        vec = vec / norm
+        if any(abs(float(vec.dot(world))) > WORLD_AXIS_TOLERANCE for world, _ in axes[:3]):
+            continue
+        if vec[numpy.argmax(numpy.abs(vec))] < 0:
+            vec = -vec
+        axes.append((vec, None))
+    return axes
+
+
+def _basis(axis):
+    helper = numpy.zeros(3)
+    helper[int(numpy.argmin(numpy.abs(axis)))] = 1.0
+    e1 = numpy.cross(axis, helper)
+    e1 = e1 / numpy.linalg.norm(e1)
+    e2 = numpy.cross(axis, e1)
+    return e1, e2
+
+
 def axisymmetry(tris, data=None):
     normals, areas = data if data is not None else face_data(tris)
     total = float(areas.sum())
@@ -162,38 +203,38 @@ def axisymmetry(tris, data=None):
         return None
     centroids = tris.mean(axis=1)
     pts = tris.reshape(-1, 3)
-    pmin = pts.min(axis=0)
-    pmax = pts.max(axis=0)
     best = None
-    for axis in range(3):
-        others = [i for i in range(3) if i != axis]
-        c0 = float((centroids[:, others[0]] * areas).sum() / total)
-        c1 = float((centroids[:, others[1]] * areas).sum() / total)
-        u = centroids[:, others[0]] - c0
-        v = centroids[:, others[1]] - c1
+    tilted = None
+    for axis, index in _candidate_axes(centroids, areas, total):
+        e1, e2 = _basis(axis)
+        cu = centroids.dot(e1)
+        cv = centroids.dot(e2)
+        c0 = float((cu * areas).sum() / total)
+        c1 = float((cv * areas).sum() / total)
+        u = cu - c0
+        v = cv - c1
         phi = numpy.arctan2(v, u)
-        harmonics = []
-        for k in (1, 2, 3, 4):
+        score = 0.0
+        for k in HARMONICS:
             re = float((areas * numpy.cos(k * phi)).sum())
             im = float((areas * numpy.sin(k * phi)).sum())
-            harmonics.append(math.hypot(re, im) / total)
-        score = max(harmonics)
-        pu = pts[:, others[0]] - c0
-        pv = pts[:, others[1]] - c1
+            score = max(score, math.hypot(re, im) / total)
+        pu = pts.dot(e1) - c0
+        pv = pts.dot(e2) - c1
         radius = float(numpy.sqrt(pu * pu + pv * pv).max())
-        length = float(pmax[axis] - pmin[axis])
-        nr_u = normals[:, others[0]]
-        nr_v = normals[:, others[1]]
-        ru = u
-        rv = v
-        rlen = numpy.sqrt(ru * ru + rv * rv)
+        along = pts.dot(axis)
+        length = float(along.max() - along.min())
+        nr_u = normals.dot(e1)
+        nr_v = normals.dot(e2)
+        rlen = numpy.sqrt(u * u + v * v)
         rlen = numpy.where(rlen > 1e-9, rlen, 1.0)
-        radial_component = (nr_u * ru + nr_v * rv) / rlen
+        radial_component = (nr_u * u + nr_v * v) / rlen
         inward = float(areas[radial_component < -0.7].sum()) / total
-        lateral = float(areas[numpy.abs(normals[:, axis]) < 0.1].sum()) / total
+        lateral = float(areas[numpy.abs(normals.dot(axis)) < 0.1].sum()) / total
         info = {
-            "axis": "xyz"[axis],
-            "axis_index": axis,
+            "axis": "xyz"[index] if index is not None else "tilted",
+            "axis_index": index,
+            "axis_vector": [round(float(c), 4) for c in axis],
             "symmetry_error": round(score, 4),
             "radius_mm": round(radius, 2),
             "diameter_mm": round(2 * radius, 2),
@@ -203,9 +244,14 @@ def axisymmetry(tris, data=None):
             "lateral_area_ratio": round(lateral, 4),
             "center": [round(c0, 2), round(c1, 2)],
         }
-        if best is None or info["symmetry_error"] < best["symmetry_error"]:
+        if index is None:
+            if tilted is None or info["symmetry_error"] < tilted["symmetry_error"]:
+                tilted = info
+        elif best is None or info["symmetry_error"] < best["symmetry_error"]:
             best = info
-    best["is_axisymmetric"] = bool(best["symmetry_error"] < 0.08)
+    if tilted is not None and tilted["symmetry_error"] < SYMMETRY_THRESHOLD and tilted["symmetry_error"] < best["symmetry_error"]:
+        best = tilted
+    best["is_axisymmetric"] = bool(best["symmetry_error"] < SYMMETRY_THRESHOLD)
     best["has_bore"] = bool(best["inward_area_ratio"] > 0.03)
     return best
 

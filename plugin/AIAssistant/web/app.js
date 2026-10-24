@@ -19,7 +19,7 @@
   var t = function () { return I18N.t.apply(null, arguments); };
   var els = {
     messages: $("messages"), welcome: $("welcome"), composer: $("composer"),
-    input: $("input"), sendBtn: $("sendBtn"), fileInput: $("fileInput"),
+    input: $("input"), sendBtn: $("sendBtn"), stopBtn: $("stopBtn"), fileInput: $("fileInput"),
     attachments: $("attachments"), objects: $("objects"), changes: $("changes"),
     changeCount: $("changeCount"), sliceCard: $("sliceCard"), sliceState: $("sliceState"),
     slicePct: $("slicePct"), sliceBar: $("sliceBar"), toast: $("toast"),
@@ -308,6 +308,8 @@
   function setBusy(on) {
     state.busy = on;
     els.sendBtn.disabled = on;
+    els.stopBtn.hidden = !on || state.demo;
+    els.stopBtn.disabled = false;
     if (!on) state.assistantBubble = null;
   }
 
@@ -345,7 +347,14 @@
       text: text,
       mode: state.modeFixed ? state.mode : undefined,
       attachments: files.map(function (f) { return { name: f.name, mime: f.mime, data: f.data }; })
-    }).catch(function () {
+    }).catch(function (err) {
+      if (err && err.status) {
+        state.localUser = Math.max(0, state.localUser - 1);
+        showTyping(false);
+        if (err.status !== 409) setBusy(false);
+        toast(err.status === 409 ? t("busy") : err.message);
+        return;
+      }
       state.demo = true;
       toast(t("demo_toast"));
       runDemo(text, files);
@@ -368,7 +377,7 @@
     el.innerHTML =
       (f.preview ? '<img class="chip-thumb" src="' + f.preview + '">' : '<div class="chip-thumb">' + esc(ext(f.name)) + "</div>") +
       '<div class="chip-info"><div class="chip-name">' + esc(f.name) + '</div><div class="chip-size">' + fmtSize(f.size) + "</div></div>" +
-      (removable ? '<button type="button" class="chip-x" title="Убрать">×</button>' : "");
+      (removable ? '<button type="button" class="chip-x" title="' + esc(t("remove_title")) + '">×</button>' : "");
     if (removable) {
       el.querySelector(".chip-x").addEventListener("click", function () {
         state.files.splice(state.files.indexOf(f), 1);
@@ -462,6 +471,11 @@
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(els.input.value); }
   });
   els.composer.addEventListener("submit", function (e) { e.preventDefault(); send(els.input.value); });
+  els.stopBtn.addEventListener("click", function () {
+    els.stopBtn.disabled = true;
+    toast(t("stopping"));
+    api("/api/cancel", {}).catch(function () { els.stopBtn.disabled = false; });
+  });
   els.fileInput.addEventListener("change", function () { addFiles(this.files); this.value = ""; });
 
   ["dragenter", "dragover"].forEach(function (t) {
@@ -645,18 +659,18 @@
   function runDemo(text, files) {
     var model = (files.filter(function (f) { return /\.(stl|obj|3mf)$/i.test(f.name); })[0] || {}).name || "bracket.stl";
     var steps = [
-      [500, { type: "assistant_text", text: "Задача: деталь под нагрузку, PETG, без поддержек. Загружаю модель и проверяю геометрию." }],
+      [500, { type: "assistant_text", text: t("demo_intro") }],
       [500, { type: "tool_call", id: "t1", name: "load_model", args: { path: model } }],
       [700, { type: "tool_result", id: "t1", result: { object_id: 1, name: model } }],
       [0, { type: "scene", objects: [{ name: model, size: [62, 40, 35] }] }],
       [300, { type: "tool_call", id: "t2", name: "get_model_bounds", args: { object_id: 1 } }],
-      [500, { type: "tool_result", id: "t2", result: { size_mm: [62, 40, 35], overhangs: "18% площади > 45°", flat_faces: 3 } }],
+      [500, { type: "tool_result", id: "t2", result: { size_mm: [62, 40, 35], overhangs: t("demo_overhang_before"), flat_faces: 3 } }],
       [300, { type: "tool_call", id: "t3", name: "rotate_object", args: { object_id: 1, axis: "x", angle: 90 } }],
-      [500, { type: "tool_result", id: "t3", result: { overhangs: "2% площади > 45°", lay_flat: true } }],
+      [500, { type: "tool_result", id: "t3", result: { overhangs: t("demo_overhang_after"), lay_flat: true } }],
       [0, { type: "scene", objects: [{ name: model, size: [62, 35, 40] }] }],
       [300, { type: "tool_call", id: "t4", name: "set_print_mode", args: { mode: "classic" } }],
       [400, { type: "tool_result", id: "t4", result: "ok" }],
-      [0, { type: "setting_changed", key: "print_mode", raw: "classic", label: "режим", value: "3D Classic" }],
+      [0, { type: "setting_changed", key: "print_mode", raw: "classic", label: t("demo_mode_label"), value: t("demo_mode_value") }],
       [300, { type: "tool_call", id: "t5", name: "set_material", args: { material: "PETG" } }],
       [400, { type: "tool_result", id: "t5", result: "ok" }],
       [0, { type: "setting_changed", key: "material", label: "material", old: "PLA", value: "PETG" }],
@@ -665,22 +679,22 @@
       [0, { type: "setting_changed", key: "wall_line_count", label: "wall_line_count", old: 2, value: 4 }],
       [0, { type: "setting_changed", key: "infill_sparse_density", label: "infill_sparse_density", old: "20 %", value: "40 %" }],
       [0, { type: "setting_changed", key: "infill_pattern", label: "infill_pattern", old: "grid", value: "gyroid" }],
-      [0, { type: "setting_changed", key: "support_enable", label: "support_enable", value: "нет" }],
+      [0, { type: "setting_changed", key: "support_enable", label: "support_enable", value: t("demo_no") }],
       [300, { type: "tool_call", id: "t7", name: "slice", args: {} }],
       [200, { type: "slice_progress", state: "slicing", progress: 0.15 }],
       [300, { type: "slice_progress", state: "slicing", progress: 0.45 }],
       [300, { type: "slice_progress", state: "slicing", progress: 0.8 }],
-      [300, { type: "tool_result", id: "t7", result: { time: "3 ч 12 мин", filament_m: 14.6, weight_g: 46 } }],
-      [0, { type: "slice_result", time: "3 ч 12 м", length: "14.6 м", weight: "46 г", layers: "175" }],
-      [400, { type: "decision", title: "Выбранные параметры", rows: [
-        ["Режим", "3D Classic", "плоское основание, нет осевой симметрии — 5D не даёт выигрыша"],
-        ["Ориентация", "X +90°", "слои поперёк нагрузки, свесы снижены с 18% до 2%"],
-        ["Материал", "PETG", "по запросу; ударная вязкость выше PLA"],
-        ["Стенки", "4 периметра", "основная прочность кронштейна — в периметрах"],
-        ["Заполнение", "40 % gyroid", "изотропная прочность без перерасхода"],
-        ["Поддержки", "выкл.", "после поворота свесы < 45°"]
+      [300, { type: "tool_result", id: "t7", result: { time: t("demo_time_long"), filament_m: 14.6, weight_g: 46 } }],
+      [0, { type: "slice_result", time: t("demo_time_short"), length: t("demo_length"), weight: t("demo_weight"), layers: "175" }],
+      [400, { type: "decision", title: t("demo_decision_title"), rows: [
+        [t("demo_r1a"), t("demo_mode_value"), t("demo_r1c")],
+        [t("demo_r2a"), t("demo_r2b"), t("demo_r2c")],
+        [t("demo_r3a"), "PETG", t("demo_r3c")],
+        [t("demo_r4a"), t("demo_r4b"), t("demo_r4c")],
+        [t("demo_r5a"), "40 % gyroid", t("demo_r5c")],
+        [t("demo_r6a"), t("demo_r6b"), t("demo_r6c")]
       ] }],
-      [200, { type: "assistant_text", text: "\n\nСлайсинг завершён. G-code и проект 3MF можно сохранить на панели справа. Если нужна большая жёсткость, можно поднять заполнение до 60 % — время печати вырастет примерно на 40 минут." }],
+      [200, { type: "assistant_text", text: t("demo_outro") }],
       [0, { type: "done" }]
     ];
     var i = 0;

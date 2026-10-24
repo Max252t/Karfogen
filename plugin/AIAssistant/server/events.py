@@ -9,6 +9,7 @@ class EventBus(object):
         self._cond = threading.Condition(threading.Lock())
         self._events = []
         self._last_id = 0
+        self.revision = 0
 
     def publish(self, event_type, data=None):
         with self._cond:
@@ -40,16 +41,24 @@ class EventBus(object):
     def clear(self):
         with self._cond:
             self._events = []
+            self.revision += 1
 
     def snapshot(self):
         with self._cond:
             return list(self._events)
+
+    def read(self, revision, since):
+        with self._cond:
+            if revision != self.revision:
+                return self.revision, True, list(self._events)
+            return self.revision, False, [e for e in self._events if e["id"] > since]
 
     def load(self, events):
         with self._cond:
             self._events = list(events)[-self.MAX_EVENTS:]
             highest = max([e["id"] for e in self._events] or [0])
             self._last_id = max(self._last_id, highest)
+            self.revision += 1
             self._cond.notify_all()
 
 

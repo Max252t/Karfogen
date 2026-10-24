@@ -43,7 +43,7 @@ MATERIAL_TYPES = OrderedDict([
 ])
 
 MATERIAL_IDS = OrderedDict([
-    ("PLA", ["generic_pla", "proto_pla", "generic_pla_175"]),
+    ("PLA", ["generic_pla", "generic_pla_175"]),
     ("TOUGH_PLA", ["generic_tough_pla", "generic_pla"]),
     ("PETG", ["generic_petg", "enduse_petg", "generic_petg_175"]),
     ("CPE", ["generic_cpe", "generic_cpe_175", "generic_petg"]),
@@ -53,7 +53,7 @@ MATERIAL_IDS = OrderedDict([
     ("PA", ["generic_nylon", "enduse_pa6", "generic_nylon_175"]),
     ("PP", ["generic_pp", "enduse_pp"]),
     ("SBS", ["enduse_sbs"]),
-    ("TPU", ["generic_tpu", "enduse_tpu_d70", "sealant_tpu", "generic_tpu_175"]),
+    ("TPU", ["generic_tpu", "enduse_tpu_d70", "generic_tpu_175"]),
 ])
 
 SPECIAL_PREFIXES = ("fiberpart_", "contifiber", "metalcast_", "sealant_", "proto_")
@@ -94,6 +94,77 @@ QUALITY_LAYER_HEIGHT = OrderedDict([
 ])
 
 
+REASONS = {
+    "ru": {
+        "mode_simple": "флекс/декор/прототип: стандартная 3D-печать",
+        "mode_disc": "тело вращения, но плоский диск (длина/диаметр=%.2f < 0.35): в 3D эффективнее",
+        "mode_thin": "тонкостенная оболочка (средняя стенка %.1f мм < 2.5): в 3D",
+        "mode_long": "длина оси больше рабочей высоты 5D (%.0f мм)",
+        "mode_rotary": "тело вращения (симметрия, ось %s, длина/диаметр=%.2f) с требованиями к точности/нагрузке: слои по окружности",
+        "mode_shaft": "вал/ось: призматический профиль вдоль оси (боковая поверхность %.0f%%), вращение, нагрузка на скручивание и точный профиль: 5D",
+        "mode_none": "нет признаков, требующих 5D",
+        "mode_forced": "режим задан явно: %s",
+        "orient_axis": "ось симметрии вертикально, по центру стола",
+        "orient_goal": "ориентация по цели %s",
+        "temp_fail": "не выдерживает %s °C",
+        "temp_tight": "запас по температуре менее 10 °C (%d °C)",
+        "temp_ok": "запас по температуре %d °C",
+        "q_proto": "быстрый прототип: слой 0.2",
+        "q_precision": "точность/внешний вид: тонкий слой (%.2f мм)",
+        "q_decor": "декор: слой 0.1, слои почти не видны",
+        "q_default": "стандартное функциональное качество: слой 0.15",
+        "walls_load": "нагрузка: 4 периметра",
+        "infill_load": "нагрузка: заполнение 40%",
+        "pattern_load": "нагрузка: изотропный gyroid",
+        "walls_airtight": "герметичность: не менее 4 периметров",
+        "walls_decor": "декор: 2 периметра",
+        "infill_decor": "декор: заполнение 10%",
+        "infill_proto": "прототип: заполнение 10%",
+        "speed_flex": "эластичный материал: низкая скорость",
+        "infill_flex": "эластичная деталь: заполнение 15%",
+        "layers_load": "нагрузка/герметичность: %d верхних и нижних слоёв",
+        "no_support": "поддержки запрещены: ориентация с минимумом нависаний",
+    },
+    "en": {
+        "mode_simple": "flexible/decorative/prototype: standard 3D printing",
+        "mode_disc": "body of revolution but a flat disc (length/diameter=%.2f < 0.35): more efficient in 3D",
+        "mode_thin": "thin-walled shell (mean wall %.1f mm < 2.5): 3D",
+        "mode_long": "axis length exceeds the 5D build height (%.0f mm)",
+        "mode_rotary": "body of revolution (symmetry, axis %s, length/diameter=%.2f) with precision/load requirements: layers around the circumference",
+        "mode_shaft": "shaft/axle: prismatic profile along the axis (lateral surface %.0f%%), rotation, torsion load and precise profile: 5D",
+        "mode_none": "nothing requires 5D",
+        "mode_forced": "mode set explicitly: %s",
+        "orient_axis": "symmetry axis vertical, centered on the plate",
+        "orient_goal": "orientation for goal %s",
+        "temp_fail": "cannot withstand %s °C",
+        "temp_tight": "temperature margin below 10 °C (%d °C)",
+        "temp_ok": "temperature margin %d °C",
+        "q_proto": "fast prototype: 0.2 layer",
+        "q_precision": "precision/appearance: fine layer (%.2f mm)",
+        "q_decor": "decorative: 0.1 layer, layers barely visible",
+        "q_default": "standard functional quality: 0.15 layer",
+        "walls_load": "load: 4 perimeters",
+        "infill_load": "load: 40% infill",
+        "pattern_load": "load: isotropic gyroid",
+        "walls_airtight": "airtight: at least 4 perimeters",
+        "walls_decor": "decorative: 2 perimeters",
+        "infill_decor": "decorative: 10% infill",
+        "infill_proto": "prototype: 10% infill",
+        "speed_flex": "elastic material: low speed",
+        "infill_flex": "elastic part: 15% infill",
+        "layers_load": "load/airtight: %d top and bottom layers",
+        "no_support": "supports forbidden: orientation with minimal overhangs",
+    },
+}
+
+
+def reason(key, *args):
+    from .. import config
+    table = REASONS.get(config.effective_language(), REASONS["en"])
+    text = table[key]
+    return text % args if args else text
+
+
 def rank_materials(tags, max_temp_c=None, flexibility=None):
     tags = [t for t in (tags or []) if t in TAG_WEIGHTS]
     ranked = []
@@ -111,12 +182,13 @@ def rank_materials(tags, max_temp_c=None, flexibility=None):
             margin = props["heat"] - float(max_temp_c)
             if margin < 0:
                 score -= 40.0 + abs(margin) * 0.5
-                reasons.append("не выдерживает %s °C" % max_temp_c)
+                reasons.append(reason("temp_fail", max_temp_c))
             elif margin >= 10:
                 score += 4.0
-                reasons.append("запас по температуре %d °C" % margin)
+                reasons.append(reason("temp_ok", margin))
             else:
-                score += 1.0
+                score -= 15.0
+                reasons.append(reason("temp_tight", margin))
         if flexibility == "flexible" and props["flex"] < 4:
             score -= 30.0
         if flexibility == "rigid" and props["flex"] >= 4:
@@ -157,47 +229,46 @@ def choose_mode(analysis, tags, machine_height_5d=231.1):
     wall = (analysis or {}).get("mean_wall_mm", 0.0)
     reasons = []
     if "flexible" in tags or "decorative" in tags or "fast_proto" in tags:
-        reasons.append("флекс/декор/прототип: стандартная 3D-печать")
+        reasons.append(reason("mode_simple"))
         return "classic", reasons
     if sym.get("is_axisymmetric"):
         aspect = sym.get("aspect", 0.0)
         if aspect < 0.35:
-            reasons.append("тело вращения, но плоский диск (длина/диаметр=%.2f < 0.35): в 3D эффективнее" % aspect)
+            reasons.append(reason("mode_disc", aspect))
             return "classic", reasons
         if wall and wall < 2.5:
-            reasons.append("тонкостенная оболочка (средняя стенка %.1f мм < 2.5): в 3D" % wall)
+            reasons.append(reason("mode_thin", wall))
             return "classic", reasons
         if sym.get("length_mm", 0) > machine_height_5d:
-            reasons.append("длина оси больше рабочей высоты 5D (%.0f мм)" % machine_height_5d)
+            reasons.append(reason("mode_long", machine_height_5d))
             return "classic", reasons
         if tags & {"precision", "rotating", "wear", "load_bearing", "airtight"}:
-            reasons.append("тело вращения (симметрия, ось %s, длина/диаметр=%.2f) с требованиями к точности/нагрузке: слои по окружности" % (sym.get("axis"), aspect))
+            reasons.append(reason("mode_rotary", sym.get("axis"), aspect))
             return "cylindrical_full", reasons
     elif ({"rotating", "load_bearing", "precision"} <= tags and sym.get("aspect", 0) >= 0.5
           and sym.get("lateral_area_ratio", 0) >= 0.5):
-        reasons.append("вал/ось: призматический профиль вдоль оси (боковая поверхность %.0f%%), вращение, "
-                       "нагрузка на скручивание и точный профиль: 5D" % (sym.get("lateral_area_ratio", 0) * 100))
+        reasons.append(reason("mode_shaft", sym.get("lateral_area_ratio", 0) * 100))
         return "cylindrical_full", reasons
-    reasons.append("нет признаков, требующих 5D")
+    reasons.append(reason("mode_none"))
     return "classic", reasons
 
 
-def recommend_settings(tags, mode, precision_level=None):
+def recommend_settings(tags, mode):
     tags = set(tags or [])
     reasons = OrderedDict()
     settings = OrderedDict()
     quality = "fast"
     if "fast_proto" in tags:
         quality = "draft"
-        reasons["quality"] = "быстрый прототип: слой 0.2"
+        reasons["quality"] = reason("q_proto")
     elif tags & {"precision"} or (tags & {"decorative"} and "thin_features" in tags):
-        quality = "high" if precision_level == "extreme" or "decorative" in tags else "normal"
-        reasons["quality"] = "точность/внешний вид: тонкий слой (%.2f мм)" % QUALITY_LAYER_HEIGHT[quality]
+        quality = "high" if "decorative" in tags else "normal"
+        reasons["quality"] = reason("q_precision", QUALITY_LAYER_HEIGHT[quality])
     elif "decorative" in tags:
         quality = "normal"
-        reasons["quality"] = "декор: слой 0.1, слои почти не видны"
+        reasons["quality"] = reason("q_decor")
     else:
-        reasons["quality"] = "стандартное функциональное качество: слой 0.15"
+        reasons["quality"] = reason("q_default")
 
     walls = 2
     infill = 20
@@ -205,26 +276,26 @@ def recommend_settings(tags, mode, precision_level=None):
     top = None
     if "load_bearing" in tags or "stiff" in tags:
         walls, infill, pattern, top = 4, 40, "gyroid", 6
-        reasons["wall_line_count"] = "нагрузка: 4 периметра"
-        reasons["infill_sparse_density"] = "нагрузка: заполнение 40%"
-        reasons["infill_pattern"] = "нагрузка: изотропный gyroid"
+        reasons["wall_line_count"] = reason("walls_load")
+        reasons["infill_sparse_density"] = reason("infill_load")
+        reasons["infill_pattern"] = reason("pattern_load")
     if "airtight" in tags:
         walls = max(walls, 4)
         infill = max(infill, 40)
-        reasons["wall_line_count"] = "герметичность: не менее 4 периметров"
+        reasons["wall_line_count"] = reason("walls_airtight")
         top = max(top or 0, 6)
     if "decorative" in tags and not tags & {"load_bearing", "stiff"}:
         walls, infill = 2, 10
-        reasons["wall_line_count"] = "декор: 2 периметра"
-        reasons["infill_sparse_density"] = "декор: заполнение 10%"
+        reasons["wall_line_count"] = reason("walls_decor")
+        reasons["infill_sparse_density"] = reason("infill_decor")
     if "fast_proto" in tags:
         walls, infill = 2, 10
-        reasons["infill_sparse_density"] = "прототип: заполнение 10%"
+        reasons["infill_sparse_density"] = reason("infill_proto")
     if "flexible" in tags:
         walls, infill, pattern = 3, 15, "gyroid"
         settings["speed_print"] = 25
-        reasons["speed_print"] = "эластичный материал: низкая скорость"
-        reasons["infill_sparse_density"] = "эластичная деталь: заполнение 15%"
+        reasons["speed_print"] = reason("speed_flex")
+        reasons["infill_sparse_density"] = reason("infill_flex")
     settings["wall_line_count"] = walls
     settings["infill_sparse_density"] = infill
     if pattern:
@@ -232,10 +303,10 @@ def recommend_settings(tags, mode, precision_level=None):
     if top:
         settings["top_layers"] = top
         settings["bottom_layers"] = top
-        reasons["top_layers"] = "нагрузка/герметичность: %d верхних и нижних слоёв" % top
+        reasons["top_layers"] = reason("layers_load", top)
     if "no_supports" in tags:
         settings["support_enable"] = False
-        reasons["support_enable"] = "поддержки запрещены: ориентация с минимумом нависаний"
+        reasons["support_enable"] = reason("no_support")
     return quality, settings, reasons
 
 

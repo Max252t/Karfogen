@@ -164,16 +164,19 @@ def create_project(name=None):
 
 
 def rename_project(project_id, name):
-    project = _read(project_id)
-    project["name"] = _clean_name(name)
-    project["auto_named"] = False
-    _write(project)
-    return _meta(project)
+    clean = _clean_name(name)
+    with _write_lock:
+        project = _read(project_id)
+        project["name"] = clean
+        project["auto_named"] = False
+        _write(project)
+        return _meta(project)
 
 
 def delete_project(project_id):
-    _read(project_id)
-    shutil.rmtree(_dir(project_id))
+    with _write_lock:
+        _read(project_id)
+        shutil.rmtree(_dir(project_id))
 
 
 def load_project(project_id):
@@ -181,15 +184,19 @@ def load_project(project_id):
 
 
 def save_project(project_id, events, history, auto_name=None):
-    project = _read(project_id)
-    project["events"] = _trim_events(events)
-    project["history"] = _strip_images(history)
-    project["messages"] = len([m for m in history if m.get("role") == "user"])
-    project["updated"] = time.time()
-    if auto_name and project.get("auto_named"):
-        project["name"] = _clean_name(auto_name)
-    _write(project)
-    return _meta(project)
+    trimmed_events = _trim_events(events)
+    stripped_history = _strip_images(history)
+    messages = len([m for m in history if m.get("role") == "user"])
+    with _write_lock:
+        project = _read(project_id)
+        project["events"] = trimmed_events
+        project["history"] = stripped_history
+        project["messages"] = messages
+        project["updated"] = time.time()
+        if auto_name and project.get("auto_named"):
+            project["name"] = _clean_name(auto_name)
+        _write(project)
+        return _meta(project)
 
 
 def name_from_history(history):
@@ -200,7 +207,8 @@ def name_from_history(history):
         if isinstance(content, list):
             content = " ".join(p.get("text", "") for p in content if p.get("type") == "text")
         content = content or ""
-        found = re.search(r"Прикреплён файл: ([^\n]+?), путь:", content)
+        found = re.search(r"Прикреплён файл: ([^\n]+?), путь:", content) or \
+            re.search(r"Модель уже в сцене: ([^\n]+?) \(object_id", content)
         text = content.split("\n\n")[0]
         return suggest_name(text, found.group(1) if found else None)
     return None
@@ -255,15 +263,15 @@ class ProjectManager(object):
     def ensure_current(self):
         with self._lock:
             if self.current() is None:
-                self.prepare_slicer()
                 self.current_id = create_project()["id"]
             return self.current_id
 
-    def create(self, name=None):
+    def create(self, name=None, prepare=True):
         self._require_idle()
         with self._lock:
             self.save_current()
-            self.prepare_slicer()
+            if prepare:
+                self.prepare_slicer()
             meta = create_project(name)
             self.current_id = meta["id"]
             self.agent.set_history([])

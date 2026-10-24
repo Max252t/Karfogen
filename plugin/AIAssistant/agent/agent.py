@@ -13,12 +13,21 @@ MAX_TOOL_RESULT_CHARS = 8000
 LLM_EXCLUDED_TOOLS = set(["create_profile"])
 OLD_TOOL_RESULT_CHARS = 400
 MAX_HISTORY_CHARS = 120000
+IMAGE_COST_CHARS = 6000
+IMAGE_ERROR_HINTS = ("image", "vision", "multimodal", "multi-modal", "изображ", "image_url", "content type")
+
+
+def is_image_rejection(error):
+    if error.status not in (400, 415, 422):
+        return False
+    text = str(error).lower()
+    return any(hint in text for hint in IMAGE_ERROR_HINTS)
 
 
 def _message_size(message):
     content = message.get("content")
     if isinstance(content, list):
-        size = sum(len(part.get("text", "")) for part in content if part.get("type") == "text")
+        size = sum(len(part.get("text", "")) if part.get("type") == "text" else IMAGE_COST_CHARS for part in content)
     else:
         size = len(content or "")
     return size + len(json.dumps(message.get("tool_calls") or [], ensure_ascii=False))
@@ -72,6 +81,7 @@ class Agent(object):
         self._history = []
         self._lock = threading.Lock()
         self._running = False
+        self._cancel = threading.Event()
         self._thread = None
         self.on_finished = None
         self.on_progress = None
@@ -87,27 +97,44 @@ class Agent(object):
     def is_running(self):
         return self._running
 
+    def cancel(self):
+        with self._lock:
+            if not self._running:
+                return False
+            self._cancel.set()
+        self._status("Останавливаю")
+        return True
+
     def get_history(self):
         return list(self._history)
 
     def set_history(self, history):
         self._history = list(history)
 
-    def submit(self, text, attachment_ids=None, model_name=None, forced_mode=None):
+    def submit(self, text, attachment_ids=None, model_name=None, forced_mode=None, notes=None, display=None):
         with self._lock:
             if self._running:
                 return False, "Ассистент ещё обрабатывает предыдущее сообщение"
             self._running = True
-        self._bus.publish("user_message", {"text": text, "attachments": list(attachment_ids or []),
-                                           "model_name": model_name})
-        self._thread = threading.Thread(target=self._run, args=(text, attachment_ids or [], model_name, forced_mode),
+            self._cancel.clear()
+        files = []
+        for item_id in attachment_ids or []:
+            item = uploads.get_item(item_id)
+            if item is not None:
+                files.append({"name": item["name"], "kind": item["kind"]})
+        data = {"text": text, "attachments": list(attachment_ids or []), "model_name": model_name,
+                "files": files, "forced_mode": forced_mode}
+        data.update(display or {})
+        self._bus.publish("user_message", data)
+        self._thread = threading.Thread(target=self._run,
+                                        args=(text, attachment_ids or [], model_name, forced_mode, list(notes or [])),
                                         name="AIAssistantAgent")
         self._thread.daemon = True
         self._thread.start()
         return True, "ok"
 
-    def _build_user_message(self, text, attachment_ids, model_name, with_images=True, forced_mode=None):
-        notes = []
+    def _build_user_message(self, text, attachment_ids, model_name, with_images=True, forced_mode=None, extra_notes=None):
+        notes = list(extra_notes or [])
         if forced_mode:
             notes.append("Режим печати зафиксирован пользователем: %s. Используй force_mode=%s в recommend_setup."
                          % (knowledge.MODE_LABELS.get(forced_mode, forced_mode), forced_mode))
@@ -129,8 +156,14 @@ class Agent(object):
         if images and with_images:
             parts = [{"type": "text", "text": full_text}]
             for item in images:
-                parts.append({"type": "image_url", "image_url": {"url": uploads.image_data_url(item)}})
-            return {"role": "user", "content": parts}
+                url = uploads.image_data_url(item)
+                if url is None:
+                    parts[0]["text"] += "\nИзображение %s слишком большое и не передано." % item["name"]
+                    continue
+                parts.append({"type": "image_url", "image_url": {"url": url}})
+            if len(parts) > 1:
+                return {"role": "user", "content": parts}
+            return {"role": "user", "content": parts[0]["text"]}
         return {"role": "user", "content": full_text}
 
     def _status(self, text):
@@ -140,17 +173,18 @@ class Agent(object):
         self._status("Жду ответ LLM")
         return self._llm.chat(messages, tools)
 
-    def _run(self, text, attachment_ids, model_name, forced_mode=None):
+    def _run(self, text, attachment_ids, model_name, forced_mode=None, notes=None):
         try:
             has_images = any((uploads.get_item(i) or {}).get("kind") == "image" for i in attachment_ids)
-            message = self._build_user_message(text, attachment_ids, model_name, forced_mode=forced_mode)
+            message = self._build_user_message(text, attachment_ids, model_name, forced_mode=forced_mode,
+                                               extra_notes=notes)
             self._history.append(message)
-            self._loop(has_images, attachment_ids, model_name, text, forced_mode)
+            self._loop(has_images, attachment_ids, model_name, text, forced_mode, notes)
         except llm_client.LLMError as e:
-            self._bus.publish("error", {"message": str(e)})
+            self._bus.publish("error", {"message": str(e), "code": e.code, "status": e.status})
         except Exception as e:
             _log("e", traceback.format_exc())
-            self._bus.publish("error", {"message": "Внутренняя ошибка ассистента: %s" % e})
+            self._bus.publish("error", {"message": "Внутренняя ошибка ассистента: %s" % e, "code": "internal"})
         finally:
             self._status("Готово")
             self._bus.publish("done", {})
@@ -165,20 +199,23 @@ class Agent(object):
     def _messages(self):
         return [{"role": "system", "content": prompts.system_prompt()}] + compact_history(self._history)
 
-    def _loop(self, has_images, attachment_ids, model_name, text, forced_mode=None):
+    def _loop(self, has_images, attachment_ids, model_name, text, forced_mode=None, notes=None):
         tools = [t for t in self._registry.list_openai() if t["function"]["name"] not in LLM_EXCLUDED_TOOLS]
         limit = config.get("max_iterations")
         for _ in range(limit):
+            if self._cancel.is_set():
+                self._publish_cancelled()
+                return
             try:
                 reply = self._chat(self._messages(), tools)
             except llm_client.LLMError as e:
-                if has_images and e.status in (400, 415, 422):
+                if has_images and is_image_rejection(e):
                     self._history[self._first_user_index()] = \
                         self._build_user_message(text, attachment_ids, model_name, with_images=False,
-                                                 forced_mode=forced_mode)
+                                                 forced_mode=forced_mode, extra_notes=notes)
                     has_images = False
                     self._bus.publish("assistant_message", {"text": "Модель не приняла изображения, продолжаю без них.",
-                                                            "intermediate": True})
+                                                            "intermediate": True, "code": "images_dropped"})
                     continue
                 raise
             tool_calls = reply.get("tool_calls") or []
@@ -187,18 +224,33 @@ class Agent(object):
                 entry["tool_calls"] = tool_calls
             self._history.append(entry)
             if not tool_calls:
+                if self._cancel.is_set():
+                    self._publish_cancelled()
+                    return
                 self._bus.publish("assistant_message", {"text": reply.get("content") or ""})
                 return
             if reply.get("content"):
                 self._bus.publish("assistant_message", {"text": reply["content"], "intermediate": True})
             for call in tool_calls:
-                self._history.append(self._execute(call))
+                if self._cancel.is_set():
+                    self._history.append({"role": "tool", "tool_call_id": call.get("id"),
+                                          "content": "Отменено пользователем"})
+                else:
+                    self._history.append(self._execute(call))
             if self.on_progress is not None:
                 try:
                     self.on_progress()
                 except Exception:
                     _log("e", traceback.format_exc())
-        self._bus.publish("error", {"message": "Достигнут лимит шагов (%d). Уточните запрос или продолжите диалог." % limit})
+        if self._cancel.is_set():
+            self._publish_cancelled()
+            return
+        self._bus.publish("error", {"message": "Достигнут лимит шагов (%d). Уточните запрос или продолжите диалог." % limit,
+                                    "code": "step_limit"})
+
+    def _publish_cancelled(self):
+        self._bus.publish("assistant_message", {"text": "Остановлено пользователем.", "intermediate": True,
+                                                "code": "cancelled"})
 
     def _first_user_index(self):
         for index in range(len(self._history) - 1, -1, -1):
