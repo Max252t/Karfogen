@@ -7,7 +7,7 @@ Item
     property var txt: assistant.strings
     property bool showStop: true
 
-    visible: assistant.running
+    visible: assistant.running && bar.showStop
     height: visible ? Style.controlLarge + Style.s2 : 0
 
     Rectangle
@@ -43,12 +43,12 @@ Item
 
         Rectangle
         {
-            visible: assistant.sliceState == "slicing"
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             height: Style.px(2)
-            width: parent.width * assistant.sliceProgress
+            width: parent.width * assistant.workProgress
             color: Style.accent
+            Behavior on width { NumberAnimation { duration: Style.progressMs; easing.type: Easing.OutCubic } }
         }
 
         AButton

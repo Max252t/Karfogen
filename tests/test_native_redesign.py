@@ -90,11 +90,13 @@ class LiveSliceTest(unittest.TestCase):
 
     def test_tool_card_changes_title_when_done(self):
         state = view_state.ChatViewState("ru")
+        state.apply({"type": "user_message", "data": {"text": "x"}})
         state.apply({"type": "tool_call", "data": {"call_id": "1", "name": "analyze_mesh", "arguments": {}}})
-        self.assertEqual(state.items[0]["title"], "Анализирую модель")
+        stage = state.items[1]["stages"][0]
+        self.assertEqual((stage["title"], stage["status"]), ("Анализирую модель", "running"))
         state.apply({"type": "tool_result", "data": {"call_id": "1", "name": "analyze_mesh", "ok": False, "error": "x"}})
-        self.assertEqual(state.items[0]["title"], "Анализ геометрии")
-        self.assertEqual(state.items[0]["status"], "error")
+        stage = state.items[1]["stages"][0]
+        self.assertEqual((stage["title"], stage["status"], stage["summary"]), ("Анализ модели не удался", "error", "x"))
 
 
 class ChangeListTest(unittest.TestCase):

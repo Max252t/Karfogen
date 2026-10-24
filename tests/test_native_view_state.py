@@ -21,48 +21,50 @@ def run(events, language="ru"):
 class ViewStateTest(unittest.TestCase):
     def test_conversation_becomes_readable_items(self):
         state = run(ui_fakes.CONVERSATION + ui_fakes.FINISH)
-        kinds = [item["kind"] for item in state.items]
-        self.assertEqual(kinds[0], "user")
-        self.assertIn("tool", kinds)
-        self.assertIn("decision", kinds)
-        self.assertEqual(kinds[-1], "assistant")
-        tools = [item for item in state.items if item["kind"] == "tool"]
-        self.assertEqual(tools[0]["title"], "Загрузка модели")
-        self.assertIn("bracket.stl", tools[0]["summary"])
-        self.assertIn("62.0 × 40.0 × 35.0", tools[0]["summary"])
-        self.assertEqual(tools[1]["title"], "Анализ геометрии")
-        self.assertEqual(tools[2]["title"], "Выбор материала")
-        self.assertEqual(tools[3]["status"], "error")
-        self.assertEqual(tools[4]["status"], "ok")
-        self.assertEqual(tools[4]["summary"], "Изменено параметров: 2")
-        self.assertEqual(tools[5]["title"], "Слайсинг")
-        self.assertEqual(tools[6]["title"], "Сохранение результата")
+        self.assertEqual([item["kind"] for item in state.items], ["user", "activity", "assistant"])
+        activity = state.items[1]
+        self.assertEqual((activity["phase"], activity["title"], activity["percent"]), ("done", "Подготовка завершена", 100))
+        stages = activity["stages"]
+        self.assertEqual([s["title"] for s in stages],
+                         ["Модель получена", "Модель проанализирована", "Параметры печати подобраны",
+                          "Настройки применены", "Слайсинг завершён", "Результат сохранён"])
+        self.assertEqual(stages[0]["summary"], "bracket.stl")
+        self.assertEqual(stages[1]["summary"], "62 × 40 × 35 мм")
+        self.assertEqual(stages[3]["summary"], "Изменено параметров: 2")
+        self.assertTrue(stages[3]["fixed"])
+        self.assertEqual(stages[3]["status"], "ok")
+        self.assertEqual(activity["summary"], "3D · Generic PETG · normal")
+        self.assertEqual([m["value"] for m in activity["metrics"]], ["2 ч 14 мин", "14,6 м", "46 г"])
+        self.assertEqual(activity["stageCount"], "6 этапов")
         self.assertFalse(state.running)
         self.assertEqual(state.task_state, "done")
 
     def test_raw_json_only_in_details(self):
         state = run(ui_fakes.CONVERSATION)
-        load = [i for i in state.items if i["meta"] == "load_model"][0]
+        load = state.items[1]["stages"][0]
         self.assertNotIn("{", load["summary"])
+        self.assertNotIn("{", state.items[1]["title"])
         self.assertIn('"path"', load["details"])
         self.assertIn("C:/models/bracket.stl", load["details"])
+        self.assertIn("Загружаю модель и анализирую геометрию.", load["details"])
+        self.assertNotIn("assistant", [i["kind"] for i in state.items])
 
     def test_running_tool_then_result_updates_same_card(self):
         state = view_state.ChatViewState("ru")
+        state.apply({"type": "user_message", "data": {"text": "x"}})
+        self.assertEqual(state.take_ops(), [("append", 0), ("append", 1)])
         state.apply({"type": "tool_call", "data": {"call_id": "a", "name": "slice", "arguments": {}}})
-        ops = state.take_ops()
-        self.assertEqual(ops, [("append", 0)])
-        self.assertEqual(state.items[0]["status"], "running")
+        self.assertEqual(state.take_ops(), [("update", 1)])
+        self.assertEqual(state.items[1]["stages"][0]["status"], "running")
         self.assertEqual(state.slice["state"], "slicing")
         state.apply({"type": "slice_progress", "data": {"progress": 0.5}})
-        self.assertEqual(state.status_text(), "Выполняю слайсинг…")
-        self.assertEqual(state.items[0]["title"], "Выполняю слайсинг")
-        state.running = True
-        self.assertEqual(state.status_text(), "Слайсинг 50 %")
+        self.assertEqual(state.items[1]["title"], "Выполняю слайсинг")
+        self.assertEqual(state.status_text(), "Выполняю слайсинг · 86 %")
         state.apply({"type": "tool_result", "data": {"call_id": "a", "name": "slice", "ok": True,
                                                      "result": {"print_time": "1h 00m", "material_g": 10}}})
-        self.assertEqual(state.take_ops(), [("update", 0)])
-        self.assertEqual(state.items[0]["status"], "ok")
+        self.assertEqual(state.take_ops(), [("update", 1)])
+        self.assertEqual(state.items[1]["stages"][0]["status"], "ok")
+        self.assertEqual(len(state.items), 2)
         self.assertEqual(state.slice["state"], "done")
 
     def test_changes_keep_first_old_value_and_latest_new(self):

@@ -8,6 +8,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 
 import qml_harness
+from PyQt5.QtCore import QCoreApplication, QEvent
 from PyQt5.QtGui import QColor, QImage
 
 
@@ -34,6 +35,12 @@ def grab(app, window, path):
     return path
 
 
+def set_on(window, name, value):
+    for item in visual_items(window.contentItem()):
+        if item.property(name) is not None and item.metaObject().indexOfProperty(name) >= 0:
+            item.setProperty(name, value)
+
+
 def render(out_dir, language, scale, theme_dir=None):
     app = qml_harness.app(scale, theme_dir)
     import ui_fakes
@@ -52,7 +59,7 @@ def render(out_dir, language, scale, theme_dir=None):
         if window is None:
             raise SystemExit("\n".join(errors))
         window.setWidth(int(560 * scale))
-        window.setHeight(int(760 * scale))
+        window.setHeight(min(int(760 * scale), app.primaryScreen().availableGeometry().height() - 80))
         window.show()
         alive.append((controller, agent, bus, window, engine, context, component))
         return controller, agent, bus, window, (engine, context, component)
@@ -67,21 +74,71 @@ def render(out_dir, language, scale, theme_dir=None):
     controller.setUseScene(True)
     shots.append(grab(app, window, os.path.join(out_dir, "02_empty_project_%s.png" % suffix)))
 
+    def shot(name, target=None):
+        controller._live.reset()
+        controller.tick()
+        shots.append(grab(app, target or window, os.path.join(out_dir, "%s_%s.png" % (name, suffix))))
+
     controller.send("Кронштейн под нагрузку" if language == "ru" else "Load-bearing bracket")
-    ui_fakes.publish(bus, ui_fakes.CONVERSATION)
+    conversation = ui_fakes.CONVERSATION
+    ui_fakes.publish(bus, conversation[:2])
     controller.tick()
-    shots.append(grab(app, window, os.path.join(out_dir, "03_running_%s.png" % suffix)))
+    shot("03a_waiting")
+    ui_fakes.publish(bus, conversation[2:6])
+    controller.tick()
+    shot("03b_analysis")
+    ui_fakes.publish(bus, conversation[6:16] + ui_fakes.MORE_SETTINGS)
+    controller.tick()
+    pump(app)
+    set_on(window, "historyOpen", True)
+    shot("03c_settings_history")
+    set_on(window, "historyOpen", False)
+    ui_fakes.publish(bus, conversation[16:18])
+    for fraction, name in ((0.10, "03d_slicing_10"), (0.55, "03e_slicing_55"), (0.95, "03f_slicing_95")):
+        bus.publish("slice_progress", {"state": "slicing", "progress": fraction})
+        controller.tick()
+        shot(name)
 
     ui_fakes.publish(bus, ui_fakes.FINISH)
     agent.running = False
     controller.tick()
-    shots.append(grab(app, window, os.path.join(out_dir, "04_chat_done_%s.png" % suffix)))
+    shot("04a_done")
+    window.setHeight(min(int(1000 * scale), app.primaryScreen().availableGeometry().height() - 80))
+    set_on(window, "moreOpen", True)
+    shot("04b_done_details")
+    set_on(window, "openStages", {"1": True})
+    set_on(window, "openTech", {"1": True})
+    shot("04c_tech_details")
+    set_on(window, "openTech", {})
+    window.setWidth(int(400 * scale))
+    shot("04d_narrow_details")
+    window.setWidth(int(560 * scale))
+    set_on(window, "moreOpen", False)
+    window.setHeight(min(int(760 * scale), app.primaryScreen().availableGeometry().height() - 80))
 
     bus.publish("user_message", {"text": "Сделай деталь прочнее"})
     bus.publish("error", {"message": "Ключ API отклонён (HTTP 401).", "code": "auth", "status": 401})
     bus.publish("done", {})
     controller.tick()
     shots.append(grab(app, window, os.path.join(out_dir, "05_error_%s.png" % suffix)))
+
+    bus.publish("user_message", {"text": "Сделай вариант из PETG" if language == "ru" else "Make a PETG version"})
+    ui_fakes.publish(bus, ui_fakes.CONVERSATION[3:9])
+    bus.publish("error", {"message": "LLM недоступна: timed out", "code": "network"})
+    bus.publish("done", {})
+    controller.tick()
+    pump(app)
+    set_on(window, "historyOpen", True)
+    shot("05b_error_partial")
+    bus.publish("user_message", {"text": "Повтори" if language == "ru" else "Again"})
+    ui_fakes.publish(bus, ui_fakes.CONVERSATION[3:7])
+    bus.publish("status", {"text": "Останавливаю"})
+    controller.tick()
+    shot("05c_stopping")
+    bus.publish("assistant_message", {"text": "Остановлено пользователем.", "intermediate": True, "code": "cancelled"})
+    bus.publish("done", {})
+    controller.tick()
+    shot("05d_cancelled")
 
     controller.showTab.emit("result")
     shots.append(grab(app, window, os.path.join(out_dir, "06_result_%s.png" % suffix)))
@@ -118,19 +175,20 @@ def render(out_dir, language, scale, theme_dir=None):
 
     long_text = ui_fakes.LONG_ANSWER_RU if language == "ru" else ui_fakes.LONG_ANSWER_EN
     controller.send("Шестерня" if language == "ru" else "Gear")
-    ui_fakes.publish(bus, ui_fakes.CONVERSATION[3:5])
-    controller.tick()
-    pump(app)
-    for item in visual_items(window.contentItem()):
-        if item.property("kindText") == "tool":
-            item.setProperty("expanded", True)
-            break
-    shots.append(grab(app, window, os.path.join(out_dir, "11_tool_details_%s.png" % suffix)))
+    bus.publish("user_message", {"text": "Шестерня" if language == "ru" else "Gear"})
+    ui_fakes.publish(bus, ui_fakes.CONVERSATION[3:9])
     bus.publish("assistant_message", {"text": long_text})
     bus.publish("done", {})
     agent.running = False
     controller.tick()
-    shots.append(grab(app, window, os.path.join(out_dir, "12_long_answer_%s.png" % suffix)))
+    shots.append(grab(app, window, os.path.join(out_dir, "12a_long_answer_%s.png" % suffix)))
+    set_on(window, "expanded", True)
+    shots.append(grab(app, window, os.path.join(out_dir, "12b_long_answer_open_%s.png" % suffix)))
+    bus.publish("user_message", {"text": "Таблица" if language == "ru" else "Table"})
+    bus.publish("assistant_message", {"text": ui_fakes.TABLE_ANSWER})
+    bus.publish("done", {})
+    controller.tick()
+    shots.append(grab(app, window, os.path.join(out_dir, "12c_table_answer_%s.png" % suffix)))
 
     from AIAssistant.server import projects
     projects.create_project("Корпус редуктора, версия для печати из PETG с усиленными рёбрами жёсткости"
@@ -143,6 +201,10 @@ def render(out_dir, language, scale, theme_dir=None):
     pump(app)
     for item in alive:
         item[0].stop()
+        item[3].close()
+        item[3].deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    pump(app)
     return shots
 
 

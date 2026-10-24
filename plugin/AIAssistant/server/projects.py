@@ -1,17 +1,17 @@
 import json
 import os
-import re
 import shutil
 import threading
 import time
 import uuid
 
 from .. import config
+from . import titles
 
 MAX_NAME = 80
 MAX_RESULT_CHARS = 20000
 AUTOSAVE_INTERVAL = 5
-DEFAULT_NAMES = ("Новый проект", "New project")
+DEFAULT_NAMES = tuple(titles.DEFAULT_TITLES.values())
 
 
 class ProjectError(Exception):
@@ -120,7 +120,18 @@ def _write(project):
                 os.remove(tmp)
 
 
+def title_source(project):
+    source = project.get("title_source")
+    if source in ("default", "auto", "manual"):
+        return source
+    if not project.get("auto_named"):
+        return "manual"
+    name = project.get("name") or ""
+    return "default" if name in DEFAULT_NAMES or titles.is_contentless(name) else "auto"
+
+
 def _meta(project):
+    waiting = bool(project.get("auto_named")) and title_source(project) == "default"
     return {
         "id": project["id"],
         "name": project["name"],
@@ -128,6 +139,8 @@ def _meta(project):
         "updated": project["updated"],
         "messages": project.get("messages", 0),
         "auto_named": project.get("auto_named", False),
+        "default_name": waiting,
+        "wants_title": waiting,
     }
 
 
@@ -151,8 +164,9 @@ def create_project(name=None):
     now = time.time()
     project = {
         "id": uuid.uuid4().hex[:12],
-        "name": _clean_name(name) if name else DEFAULT_NAMES[0],
+        "name": _clean_name(name) if name else titles.DEFAULT_TITLES[config.effective_language()],
         "auto_named": not name,
+        "title_source": "manual" if name else "default",
         "created": now,
         "updated": now,
         "messages": 0,
@@ -169,6 +183,7 @@ def rename_project(project_id, name):
         project = _read(project_id)
         project["name"] = clean
         project["auto_named"] = False
+        project["title_source"] = "manual"
         _write(project)
         return _meta(project)
 
@@ -183,7 +198,7 @@ def load_project(project_id):
     return _read(project_id)
 
 
-def save_project(project_id, events, history, auto_name=None):
+def save_project(project_id, events, history, title=None):
     trimmed_events = _trim_events(events)
     stripped_history = _strip_images(history)
     messages = len([m for m in history if m.get("role") == "user"])
@@ -193,34 +208,23 @@ def save_project(project_id, events, history, auto_name=None):
         project["history"] = stripped_history
         project["messages"] = messages
         project["updated"] = time.time()
-        if auto_name and project.get("auto_named"):
-            project["name"] = _clean_name(auto_name)
+        clean = titles.sanitize_title(title) if title else None
+        if clean and project.get("auto_named") and title_source(project) == "default":
+            project["name"] = clean
+            project["title_source"] = "auto"
+        elif "title_source" not in project:
+            project["title_source"] = title_source(project)
         _write(project)
         return _meta(project)
 
 
-def name_from_history(history):
-    for message in history:
-        if message.get("role") != "user":
-            continue
-        content = message.get("content")
-        if isinstance(content, list):
-            content = " ".join(p.get("text", "") for p in content if p.get("type") == "text")
-        content = content or ""
-        found = re.search(r"Прикреплён файл: ([^\n]+?), путь:", content) or \
-            re.search(r"Модель уже в сцене: ([^\n]+?) \(object_id", content)
-        text = content.split("\n\n")[0]
-        return suggest_name(text, found.group(1) if found else None)
-    return None
+def service_prompts():
+    from ..ui import strings
+    return tuple(strings.text(language, "continue_prompt") for language in strings.TABLES)
 
 
-def suggest_name(text, model_file=None):
-    if model_file:
-        base = os.path.splitext(os.path.basename(model_file))[0].strip()
-        if base:
-            return base
-    first = " ".join((text or "").split())
-    return first[:40] if first else None
+def title_from_events(events):
+    return titles.title_from_events(events, config.effective_language(), service_prompts())
 
 
 class ProjectManager(object):
@@ -235,6 +239,26 @@ class ProjectManager(object):
         self.bus = bus
         agent.on_finished = self.save_current
         agent.on_progress = self.autosave
+        agent.title_handler = self
+        self._pending_title = None
+
+    def wants_title(self):
+        meta = self.current()
+        pending = getattr(self, "_pending_title", None)
+        return bool(meta and meta["wants_title"] and (pending is None or pending[0] != self.current_id))
+
+    def propose_title(self, title):
+        clean = titles.sanitize_title(title)
+        if not clean or not self.wants_title():
+            return False
+        self._pending_title = (self.current_id, clean)
+        return True
+
+    def _title_for(self, project_id, events):
+        pending = getattr(self, "_pending_title", None)
+        if pending and pending[0] == project_id:
+            return pending[1]
+        return title_from_events(events)
 
     def current(self):
         if self.current_id is None:
@@ -309,8 +333,12 @@ class ProjectManager(object):
         if self.current_id is None or self.agent is None:
             return
         history = self.agent.get_history()
+        events = self.bus.snapshot()
         try:
-            save_project(self.current_id, self.bus.snapshot(), history, name_from_history(history))
+            project_id = self.current_id
+            meta = save_project(project_id, events, history, self._title_for(project_id, events))
+            if not meta["wants_title"]:
+                self._pending_title = None
             self._last_autosave = time.time()
         except Exception as e:
             _log("e", "could not save project %s: %s" % (self.current_id, e))

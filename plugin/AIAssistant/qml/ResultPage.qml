@@ -249,7 +249,7 @@ Item
 
                 Card
                 {
-                    visible: assistant.decisionModel.count > 0 || assistant.changeModel.count > 0 || assistant.toolCount > 0
+                    visible: assistant.decisionModel.count > 0 || assistant.changeModel.count > 0 || assistant.stageHistory.length > 0
                     spacing: Style.s2
 
                     Disclosure
@@ -259,16 +259,10 @@ Item
                         badge: String(assistant.decisionModel.count)
                         open: true
 
-                        Repeater
+                        DecisionTable
                         {
-                            model: assistant.decisionModel
-
-                            KeyValue
-                            {
-                                key: model.label
-                                value: model.value
-                                note: model.reason
-                            }
+                            showTitle: false
+                            rows: assistant.decisionList
                         }
                     }
 
@@ -279,55 +273,23 @@ Item
                         badge: String(assistant.changeModel.count)
                         open: assistant.changeModel.count <= 6
 
-                        Repeater
+                        ParamChanges
                         {
-                            model: assistant.changeModel
-
-                            KeyValue
-                            {
-                                key: model.label
-                                value: model.old != "" ? txt.res_old_new.replace("%s", model.old).replace("%s", model.value) : model.value
-                                secondary: model.key != model.label ? model.key : ""
-                            }
+                            showTitle: false
+                            changes: assistant.changeList
                         }
                     }
 
                     Disclosure
                     {
                         id: history
-                        visible: assistant.toolCount > 0
-                        text: txt.res_details
-                        badge: String(assistant.toolCount)
+                        visible: assistant.stageHistory.length > 0
+                        text: txt.work_log
+                        badge: String(assistant.stageHistory.length)
 
-                        Repeater
+                        StageList
                         {
-                            model: history.open ? assistant.messageModel : null
-
-                            Row
-                            {
-                                visible: model.kind == "tool"
-                                height: visible ? implicitHeight : 0
-                                width: parent ? parent.width : 0
-                                spacing: Style.s2
-
-                                Icon
-                                {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    name: model.status == "error" ? "alert" : (model.status == "running" ? "spinner" : "check")
-                                    size: Style.iconSmall
-                                    color: model.status == "error" ? Style.danger : Style.success
-                                }
-
-                                Text
-                                {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: parent.width - Style.iconSmall - Style.s2
-                                    text: model.title + (model.summary != "" ? " — " + model.summary : "")
-                                    font: Style.small
-                                    color: Style.textSecondary
-                                    elide: Text.ElideRight
-                                }
-                            }
+                            stages: history.open ? assistant.stageHistory : []
                         }
                     }
                 }
