@@ -1,9 +1,22 @@
+import os
 import re
 import subprocess
 import sys
 
 PATTERN = re.compile(r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\([\w\-./]+\))?!?: \S.*")
 ZERO = "0" * 40
+IGNORE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commit_check_ignore.txt")
+
+
+def ignored_prefixes():
+    if not os.path.isfile(IGNORE_FILE):
+        return []
+    with open(IGNORE_FILE, "r", encoding="utf-8") as handle:
+        return [line.strip().lower() for line in handle if line.strip()]
+
+
+def is_ignored(sha, prefixes):
+    return any(sha.lower().startswith(prefix) for prefix in prefixes)
 
 
 def commits(rev_range):
@@ -21,8 +34,9 @@ def main(argv):
         print("commits: nothing to check")
         return 0
     problems = []
+    prefixes = ignored_prefixes()
     for sha, subject, body in commits(argv[1]):
-        if subject.startswith("Merge "):
+        if subject.startswith("Merge ") or is_ignored(sha, prefixes):
             continue
         if not PATTERN.match(subject):
             problems.append("%s: not a Conventional Commit: %s" % (sha[:8], subject))
