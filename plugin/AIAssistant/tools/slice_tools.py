@@ -1,6 +1,7 @@
 import io
 import os
 import threading
+import tempfile
 import time
 
 from .. import config
@@ -152,6 +153,19 @@ def _default_model_name():
     return os.path.splitext(names[0])[0]
 
 
+def _atomic_write(path, data):
+    descriptor, temporary = tempfile.mkstemp(prefix=".export-", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.remove(temporary)
+
+
 def _write_gcode(path):
     if threading.current_thread() is threading.main_thread():
         raise ToolError("Internal error: writers decorated with call_on_qt_thread must run outside the main thread")
@@ -166,9 +180,9 @@ def _write_gcode(path):
     if not writer.write(stream, None):
         raise ToolError("G-code export failed: %s" % writer.getInformation())
     text = stream.getvalue()
-    with io.open(path, "w", encoding="utf-8", newline="") as handle:
-        handle.write(text)
-    return len(text)
+    data = text.encode("utf-8")
+    _atomic_write(path, data)
+    return len(data)
 
 
 @registry.tool("export_gcode",
@@ -196,8 +210,7 @@ def _write_project(path):
     if not writer.write(stream, [root]):
         raise ToolError("Project export failed")
     data = stream.getvalue()
-    with open(path, "wb") as handle:
-        handle.write(data)
+    _atomic_write(path, data)
     return len(data)
 
 
