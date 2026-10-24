@@ -19,6 +19,7 @@ class AIAssistant(Extension):
         self._server = AssistantServer()
         self._controller = None
         self._window = None
+        self._dock = None
         self.setMenuName("AI Assistant")
         self.addMenuItem("Open chat", self.openChat)
         try:
@@ -48,6 +49,9 @@ class AIAssistant(Extension):
             self._create_window()
         if self._window is None:
             return
+        if self._dock is not None:
+            self._dock.open()
+            return
         self._window.show()
         self._window.raise_()
         self._window.requestActivate()
@@ -64,11 +68,10 @@ class AIAssistant(Extension):
         controller.setWindow(window)
         main = app.getMainWindow()
         if main is not None:
+            from . import config
+            from .ui.dock import DockManager
             window.setTransientParent(main)
-            if not controller.windowGeometry:
-                margin = int(24 * main.devicePixelRatio())
-                window.setX(main.x() + max(0, main.width() - window.width() - margin))
-                window.setY(main.y() + margin * 3)
+            self._dock = DockManager(main, window, app.getPreferences(), config)
         try:
             app.getController().getScene().sceneChanged.connect(controller.markSceneDirty)
         except Exception:
@@ -79,6 +82,8 @@ class AIAssistant(Extension):
     def _shutdown(self):
         if self._controller is not None:
             self._controller.stop()
+        if self._dock is not None:
+            self._dock.release()
         agent = get_agent()
         if agent.is_running():
             agent.cancel()
