@@ -1,76 +1,67 @@
 import QtQuick 2.2
 import "."
 
-Rectangle
+Item
 {
-    id: tabs
+    id: bar
     property string current: "chat"
     property var items: []
     signal selected(string name)
 
-    width: parent ? parent.width : implicitWidth
-    height: Style.controlHeight + Style.narrow
-    color: Style.background
+    height: Style.controlHeight + Style.s2
 
     Row
     {
-        anchors.left: parent.left
-        anchors.leftMargin: Style.margin
-        anchors.bottom: parent.bottom
-        spacing: Style.wide
+        x: Style.s3
+        anchors.top: parent.top
+        spacing: Style.s1
 
         Repeater
         {
-            model: tabs.items
+            model: bar.items
 
             Item
             {
                 id: tab
-                property bool active: tabs.current == modelData.name
-                width: tabRow.width
-                height: tabs.height
+                property bool active: bar.current == modelData.name
+                width: tabRow.implicitWidth + 2 * Style.s3
+                height: Style.controlHeight
+                activeFocusOnTab: true
+                Keys.onSpacePressed: bar.selected(modelData.name)
+                Keys.onReturnPressed: bar.selected(modelData.name)
+
+                Rectangle
+                {
+                    anchors.fill: parent
+                    radius: Style.radius
+                    color: tab.active ? Style.accentSoft : (tabMouse.containsMouse ? Style.surfaceHover : "transparent")
+                    border.width: tab.activeFocus ? Style.focusWidth : 0
+                    border.color: Style.focusRing
+                    Behavior on color { ColorAnimation { duration: Style.hoverMs } }
+                }
 
                 Row
                 {
                     id: tabRow
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Style.narrow
+                    anchors.centerIn: parent
+                    spacing: Style.s1 + Style.px(2)
 
                     Text
                     {
                         anchors.verticalCenter: parent.verticalCenter
                         text: modelData.label
-                        font: tab.active ? Style.fontBold : Style.font
-                        color: tab.active ? Style.primary : (tabMouse.containsMouse ? Style.text : Style.textSecondary)
+                        font: tab.active ? Style.bodyStrong : Style.body
+                        color: tab.active ? Style.accent : (tabMouse.containsMouse ? Style.text : Style.textSecondary)
                     }
 
-                    Rectangle
+                    Text
                     {
-                        visible: modelData.badge > 0
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(height, badgeText.implicitWidth + Style.narrow * 2)
-                        height: badgeText.implicitHeight + Math.round(Style.narrow / 2)
-                        radius: height / 2
-                        color: Style.primaryTint
-
-                        Text
-                        {
-                            id: badgeText
-                            anchors.centerIn: parent
-                            text: modelData.badge
-                            font: Style.fontSmall
-                            color: Style.primary
-                        }
+                        visible: modelData.badge > 0
+                        text: modelData.badge
+                        font: Style.small
+                        color: tab.active ? Style.accent : Style.textMuted
                     }
-                }
-
-                Rectangle
-                {
-                    anchors.bottom: parent.bottom
-                    width: parent.width
-                    height: Math.round(2 * Style.scale)
-                    color: Style.primary
-                    visible: tab.active
                 }
 
                 MouseArea
@@ -79,17 +70,9 @@ Rectangle
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: tabs.selected(modelData.name)
+                    onClicked: bar.selected(modelData.name)
                 }
             }
         }
-    }
-
-    Rectangle
-    {
-        anchors.bottom: parent.bottom
-        width: parent.width
-        height: Style.lineWidth
-        color: Style.hairline
     }
 }

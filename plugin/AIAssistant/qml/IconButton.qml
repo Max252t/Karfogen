@@ -1,37 +1,71 @@
 import QtQuick 2.2
-import UM 1.2 as UM
 import "."
 
-Rectangle
+Item
 {
     id: control
 
     property string iconName: "settings"
     property string tooltip: ""
-    property bool danger: false
-    property color iconColor: danger ? Style.danger : (mouse.containsMouse ? Style.primary : Style.textSecondary)
+    property string tone: "normal"
+    property bool checked: false
     signal clicked()
+
+    readonly property bool hovered: mouse.containsMouse
 
     implicitWidth: Style.controlHeight
     implicitHeight: Style.controlHeight
-    radius: Style.radius
-    color: mouse.containsMouse ? (danger ? Style.dangerTint : Style.primaryTint) : "transparent"
-    border.width: activeFocus ? Style.lineWidth : 0
-    border.color: Style.fieldFocus
-    opacity: enabled ? 1.0 : 0.4
     activeFocusOnTab: enabled
     Keys.onSpacePressed: control.clicked()
     Keys.onReturnPressed: control.clicked()
+    Keys.onEnterPressed: control.clicked()
 
-    UM.RecolorImage
+    Rectangle
+    {
+        anchors.fill: parent
+        anchors.margins: -Style.focusWidth
+        radius: Style.radius + Style.focusWidth
+        color: "transparent"
+        border.width: Style.focusWidth
+        border.color: Style.focusRing
+        visible: control.activeFocus
+    }
+
+    Rectangle
+    {
+        anchors.fill: parent
+        radius: Style.radius
+        color:
+        {
+            if (!control.enabled)
+                return "transparent"
+            if (control.tone == "danger" && control.hovered)
+                return control.pressedState ? Style.dangerSoftHover : Style.dangerSoft
+            if (control.checked)
+                return Style.accentSoft
+            if (mouse.pressed)
+                return Style.surfacePressed
+            return control.hovered ? Style.surfaceHover : "transparent"
+        }
+        Behavior on color { ColorAnimation { duration: Style.hoverMs } }
+    }
+
+    readonly property bool pressedState: mouse.pressed
+
+    Icon
     {
         anchors.centerIn: parent
-        width: Style.icon
-        height: Style.icon
-        sourceSize.width: width
-        sourceSize.height: height
-        source: UM.Theme.getIcon(control.iconName)
-        color: control.iconColor
+        name: control.iconName
+        color:
+        {
+            if (!control.enabled)
+                return Style.textDisabled
+            if (control.tone == "danger" && control.hovered)
+                return Style.danger
+            if (control.checked || control.tone == "accent")
+                return Style.accent
+            return control.hovered ? Style.text : Style.textSecondary
+        }
     }
 
     MouseArea
@@ -39,14 +73,13 @@ Rectangle
         id: mouse
         anchors.fill: parent
         hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: control.clicked()
     }
 
-    UM.TooltipArea
+    HoverTip
     {
-        anchors.fill: parent
+        area: mouse
         text: control.tooltip
-        acceptedButtons: Qt.NoButton
     }
 }

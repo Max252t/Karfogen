@@ -7,7 +7,8 @@ Item
     property string key: ""
     property string value: ""
     property string secondary: ""
-    property real keyShare: 0.4
+    property string note: ""
+    property real keyShare: 0.38
 
     width: parent ? parent.width : implicitWidth
     height: Math.max(keyLabel.height, valueColumn.height)
@@ -15,9 +16,9 @@ Item
     Text
     {
         id: keyLabel
-        width: Math.round(row.width * row.keyShare) - Style.narrow
+        width: Math.round(row.width * row.keyShare) - Style.s2
         text: row.key
-        font: Style.font
+        font: Style.body
         color: Style.textSecondary
         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
     }
@@ -26,15 +27,26 @@ Item
     {
         id: valueColumn
         anchors.left: keyLabel.right
-        anchors.leftMargin: Style.narrow
+        anchors.leftMargin: Style.s2
         anchors.right: parent.right
+        spacing: Style.px(2)
 
         Text
         {
             width: parent.width
             text: row.value != "" ? row.value : "—"
-            font: Style.fontBold
-            color: Style.text
+            font: Style.bodyStrong
+            color: row.value != "" ? Style.text : Style.textMuted
+            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+        }
+
+        Text
+        {
+            width: parent.width
+            visible: row.note != ""
+            text: row.note
+            font: Style.small
+            color: Style.textSecondary
             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         }
 
@@ -43,9 +55,9 @@ Item
             width: parent.width
             visible: row.secondary != ""
             text: row.secondary
-            font: Style.fontSmall
-            color: Style.textSecondary
-            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+            font: Style.caption
+            color: Style.textMuted
+            wrapMode: Text.WrapAnywhere
         }
     }
 }

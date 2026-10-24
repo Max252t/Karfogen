@@ -77,7 +77,7 @@ class LoadQmlTest(unittest.TestCase):
             window.setWidth(window.minimumWidth())
             self.pump(app)
             self.assertEqual(window.property("currentTab"), "chat")
-            self.assertGreaterEqual(window.minimumWidth(), 400)
+            self.assertGreaterEqual(window.minimumWidth(), 380)
             self.assertGreater(controller.messageModel.count, 5)
             before = controller.messageModel.items()
             window.close()

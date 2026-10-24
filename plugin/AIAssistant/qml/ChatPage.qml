@@ -28,21 +28,39 @@ Item
             id: scroll
             anchors.fill: parent
             visible: list.count > 0
-            style: UM.Theme.styles.scrollview
+            style: Style.scrollStyle
+            horizontalScrollBarPolicy: Qt.ScrollBarAlwaysOff
 
             ListView
             {
                 id: list
                 property bool stick: true
+                property int unread: 0
                 model: assistant.messageModel
-                spacing: Style.narrow
-                topMargin: Style.margin
-                bottomMargin: Style.margin
+                topMargin: Style.s3
+                bottomMargin: Style.s3
                 boundsBehavior: Flickable.StopAtBounds
+                cacheBuffer: Style.px(600)
                 delegate: MessageDelegate { width: list.width }
 
-                onMovementEnded: stick = (contentY + height >= contentHeight - Style.wide)
-                onCountChanged: if (stick) stickTimer.restart()
+                function atEnd()
+                {
+                    return contentY + height >= contentHeight + bottomMargin - Style.s5
+                }
+
+                onMovementEnded:
+                {
+                    stick = atEnd()
+                    if (stick)
+                        unread = 0
+                }
+                onCountChanged:
+                {
+                    if (stick)
+                        stickTimer.restart()
+                    else if (count > 0)
+                        unread += 1
+                }
                 onContentHeightChanged: if (stick) stickTimer.restart()
 
                 Timer
@@ -54,32 +72,99 @@ Item
             }
         }
 
+        Rectangle
+        {
+            id: newMessages
+            visible: list.unread > 0 && !list.stick && scroll.visible
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Style.s2
+            width: newRow.implicitWidth + 2 * Style.s3
+            height: Style.controlHeight
+            radius: height / 2
+            color: newMouse.containsMouse ? Style.accentHover : Style.accent
+
+            Row
+            {
+                id: newRow
+                anchors.centerIn: parent
+                spacing: Style.s1
+
+                Icon
+                {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "arrow-down"
+                    size: Style.iconSmall
+                    color: Style.textOnAccent
+                }
+
+                Text
+                {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: txt.new_messages
+                    font: Style.smallStrong
+                    color: Style.textOnAccent
+                }
+            }
+
+            MouseArea
+            {
+                id: newMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked:
+                {
+                    list.stick = true
+                    list.unread = 0
+                    list.positionViewAtEnd()
+                }
+            }
+        }
+
         Flickable
         {
+            id: welcomeFlick
             anchors.fill: parent
             visible: list.count == 0
-            contentHeight: welcome.height + 2 * Style.wide
+            contentHeight: Math.max(height, welcome.height + 2 * Style.s5)
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
             Column
             {
                 id: welcome
-                x: Style.wide
-                y: Style.wide
-                width: parent.width - 2 * Style.wide
-                spacing: Style.margin
+                width: Math.min(parent.width - 2 * Style.s5, Style.px(520))
+                x: Math.round((parent.width - width) / 2)
+                y: Math.max(Style.s5, Math.round((welcomeFlick.height - height) / 3))
+                spacing: Style.s4
 
-                Card
+                Rectangle
                 {
-                    visible: !assistant.configured
-                    accent: Style.warning
+                    width: Style.px(44)
+                    height: width
+                    radius: Style.radiusLarge
+                    color: Style.accentSoft
+
+                    Icon
+                    {
+                        anchors.centerIn: parent
+                        name: "sparkle"
+                        size: Style.px(22)
+                        color: Style.accent
+                    }
+                }
+
+                Column
+                {
+                    width: parent.width
+                    spacing: Style.s2
 
                     Text
                     {
                         width: parent.width
-                        text: txt.setup_title
-                        font: Style.fontHeading
+                        text: assistant.configured ? txt.empty_title : txt.setup_title
+                        font: Style.headline
                         color: Style.text
                         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     }
@@ -87,149 +172,133 @@ Item
                     Text
                     {
                         width: parent.width
-                        text: txt.setup_text
-                        font: Style.font
-                        color: Style.text
+                        text: assistant.configured ? txt.welcome_lead : txt.setup_text
+                        font: Style.body
+                        color: Style.textSecondary
                         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                        lineHeight: 1.15
                     }
+                }
 
-                    Column
+                Column
+                {
+                    width: parent.width
+                    spacing: Style.s3
+
+                    Repeater
                     {
-                        width: parent.width
-                        spacing: Math.round(Style.narrow / 2)
+                        model: assistant.configured ? [txt.empty_step1, txt.empty_step2, txt.empty_step3]
+                                                    : [txt.set_base_url + " — " + txt.set_base_url_hint,
+                                                       txt.set_model + " — " + txt.set_model_hint,
+                                                       txt.set_key + " — " + txt.set_key_hint]
 
-                        Repeater
+                        Item
                         {
-                            model: ["Base URL — " + txt.set_base_url_hint, txt.set_model + " — " + txt.set_model_hint, txt.set_key + " — " + txt.set_key_hint]
+                            width: welcome.width
+                            height: Math.max(number.height, stepText.height)
+
+                            Rectangle
+                            {
+                                id: number
+                                width: Style.px(24)
+                                height: width
+                                radius: width / 2
+                                color: Style.surfaceAlt
+
+                                Text
+                                {
+                                    anchors.centerIn: parent
+                                    text: index + 1
+                                    font: Style.smallStrong
+                                    color: Style.textSecondary
+                                }
+                            }
 
                             Text
                             {
-                                width: parent.width
-                                text: "•  " + modelData
-                                font: Style.font
-                                color: Style.textSecondary
+                                id: stepText
+                                anchors.left: number.right
+                                anchors.leftMargin: Style.s3
+                                anchors.right: parent.right
+                                y: Math.max(0, Math.round((number.height - Style.sizeBody * 1.35) / 2))
+                                text: modelData
+                                font: Style.body
+                                color: Style.text
                                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                             }
                         }
                     }
-
-                    AButton
-                    {
-                        variant: "primary"
-                        iconName: "settings"
-                        text: txt.setup_button
-                        onClicked: page.settingsRequested()
-                    }
-                }
-
-                Text
-                {
-                    width: parent.width
-                    text: txt.empty_title
-                    font: Style.fontHeading
-                    color: Style.text
-                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                }
-
-                Repeater
-                {
-                    model: [txt.empty_step1, txt.empty_step2, txt.empty_step3]
-
-                    Row
-                    {
-                        width: welcome.width
-                        spacing: Style.margin
-
-                        Rectangle
-                        {
-                            width: Math.round(Style.controlHeight * 0.9)
-                            height: width
-                            radius: width / 2
-                            color: Style.primaryTint
-
-                            Text
-                            {
-                                anchors.centerIn: parent
-                                text: index + 1
-                                font: Style.fontBold
-                                color: Style.primary
-                            }
-                        }
-
-                        Text
-                        {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: welcome.width - Style.controlHeight - Style.margin
-                            text: modelData
-                            font: Style.font
-                            color: Style.text
-                            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                        }
-                    }
-                }
-
-                Card
-                {
-                    visible: assistant.sceneModel.count > 0 && !assistant.useScene
-                    tinted: true
-
-                    Text
-                    {
-                        width: parent.width
-                        text: txt.scene_objects
-                        font: Style.fontBold
-                        color: Style.text
-                    }
-
-                    Repeater
-                    {
-                        model: assistant.sceneModel
-
-                        Text
-                        {
-                            width: parent.width
-                            text: model.name + "  ·  " + model.dims
-                            font: Style.font
-                            color: Style.textSecondary
-                            elide: Text.ElideMiddle
-                        }
-                    }
-
-                    AButton
-                    {
-                        iconName: "view_3d"
-                        text: assistant.useScene ? assistant.sceneSummary : txt.scene_use
-                        onClicked:
-                        {
-                            assistant.setUseScene(true)
-                            composer.focusInput()
-                        }
-                    }
-                }
-
-                Text
-                {
-                    width: parent.width
-                    text: txt.templates
-                    font: Style.fontBold
-                    color: Style.text
-
                 }
 
                 Flow
                 {
                     width: parent.width
-                    spacing: Style.narrow
+                    spacing: Style.s2
 
-                    Repeater
+                    AButton
                     {
-                        model: ["tpl_load", "tpl_precise", "tpl_decor", "tpl_flex", "tpl_rotating"]
+                        visible: !assistant.configured
+                        variant: "primary"
+                        iconName: "settings"
+                        text: txt.setup_button
+                        onClicked: page.settingsRequested()
+                    }
 
-                        AButton
+                    AButton
+                    {
+                        visible: assistant.configured && assistant.sceneModel.count > 0
+                        variant: assistant.useScene ? "accent" : "primary"
+                        iconName: assistant.useScene ? "check" : "cube"
+                        text: txt.scene_use
+                        onClicked:
                         {
-                            compact: true
-                            text: txt[modelData]
-                            onClicked: composer.insertTemplate(txt[modelData + "_text"])
+                            if (assistant.sceneModel.count > 1)
+                                assistant.selectWholeScene()
+                            else
+                                assistant.setUseScene(true)
+                            composer.focusInput()
+                        }
+                    }
+
+                    AButton
+                    {
+                        visible: assistant.configured
+                        variant: assistant.sceneModel.count > 0 ? "secondary" : "primary"
+                        iconName: "paperclip"
+                        text: txt.welcome_attach
+                        onClicked: composer.pickFile()
+                    }
+                }
+
+                Column
+                {
+                    visible: assistant.configured
+                    width: parent.width
+                    spacing: Style.s2
+
+                    Text
+                    {
+                        text: txt.welcome_examples
+                        font: Style.smallStrong
+                        color: Style.textMuted
+                    }
+
+                    Flow
+                    {
+                        width: parent.width
+                        spacing: Style.s2
+
+                        Repeater
+                        {
+                            model: ["tpl_load", "tpl_precise", "tpl_decor", "tpl_flex", "tpl_rotating"]
+
+                            AButton
+                            {
+                                size: "small"
+                                variant: "secondary"
+                                text: txt[modelData]
+                                onClicked: composer.insertTemplate(txt[modelData + "_text"])
+                            }
                         }
                     }
                 }
@@ -239,19 +308,32 @@ Item
         Rectangle
         {
             anchors.fill: parent
-            anchors.margins: Style.narrow
+            anchors.margins: Style.s3
             visible: dropArea.containsDrag
-            color: Style.primaryTint
-            radius: Style.radius
-            border.width: Math.round(2 * Style.scale)
-            border.color: Style.primary
+            color: Style.accentSoft
+            radius: Style.radiusLarge
+            border.width: Style.focusWidth
+            border.color: Style.accent
 
-            Text
+            Column
             {
                 anchors.centerIn: parent
-                text: txt.drop_hint
-                font: Style.fontHeading
-                color: Style.primary
+                spacing: Style.s2
+
+                Icon
+                {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    name: "paperclip"
+                    size: Style.px(28)
+                    color: Style.accent
+                }
+
+                Text
+                {
+                    text: txt.drop_hint
+                    font: Style.title
+                    color: Style.accent
+                }
             }
         }
     }

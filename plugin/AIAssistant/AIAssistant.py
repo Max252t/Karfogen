@@ -32,8 +32,16 @@ class AIAssistant(Extension):
             Logger.logException("e", "AIAssistant: failed to start MCP server")
         try:
             Application.getInstance().applicationShuttingDown.connect(self._shutdown)
+            Application.getInstance().mainWindowChanged.connect(self._watch_slicing)
         except Exception:
-            Logger.logException("w", "AIAssistant: could not subscribe to shutdown")
+            Logger.logException("w", "AIAssistant: could not subscribe to application signals")
+
+    def _watch_slicing(self):
+        from .tools import slice_tools
+        try:
+            slice_tools.attach_monitor()
+        except Exception:
+            Logger.logException("w", "AIAssistant: slicing done in the slicer UI will be detected on first export")
 
     def openChat(self):
         if self._window is None:

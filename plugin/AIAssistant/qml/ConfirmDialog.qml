@@ -1,7 +1,5 @@
 import QtQuick 2.2
-import QtQuick.Controls 1.1
 import QtQuick.Window 2.2
-import UM 1.2 as UM
 import "."
 
 Window
@@ -33,13 +31,13 @@ Window
 
     modality: Qt.WindowModal
     flags: Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
-    width: Math.round(420 * Style.scale)
-    height: body.height + buttons.height + 3 * Style.margin
+    width: Style.px(440)
+    height: body.height + buttons.height + 3 * Style.s4
     minimumWidth: width
     maximumWidth: width
     minimumHeight: height
     maximumHeight: height
-    color: Style.background
+    color: Style.surface
 
     Item
     {
@@ -50,26 +48,48 @@ Window
         Column
         {
             id: body
-            x: Style.margin
-            y: Style.margin
-            width: parent.width - 2 * Style.margin
-            spacing: Style.narrow
+            x: Style.s4
+            y: Style.s4
+            width: parent.width - 2 * Style.s4
+            spacing: Style.s3
 
-            Text
+            Row
             {
                 width: parent.width
-                text: dialog.title
-                font: Style.fontHeading
-                color: Style.text
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                spacing: Style.s3
+
+                Rectangle
+                {
+                    width: Style.px(32)
+                    height: width
+                    radius: Style.radius
+                    color: dialog.danger ? Style.dangerSoft : Style.accentSoft
+
+                    Icon
+                    {
+                        anchors.centerIn: parent
+                        name: dialog.danger ? "warning" : "info"
+                        color: dialog.danger ? Style.danger : Style.accent
+                    }
+                }
+
+                Text
+                {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - Style.px(32) - Style.s3
+                    text: dialog.title
+                    font: Style.title
+                    color: Style.text
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                }
             }
 
             Text
             {
                 width: parent.width
                 text: dialog.message
-                font: Style.font
-                color: Style.text
+                font: Style.body
+                color: Style.textSecondary
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
             }
 
@@ -86,13 +106,14 @@ Window
         {
             id: buttons
             anchors.right: parent.right
-            anchors.rightMargin: Style.margin
+            anchors.rightMargin: Style.s4
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: Style.margin
-            spacing: Style.narrow
+            anchors.bottomMargin: Style.s4
+            spacing: Style.s2
 
             AButton
             {
+                variant: "ghost"
                 text: dialog.txt.cancel
                 onClicked: dialog.finish(false)
             }

@@ -1,6 +1,5 @@
 import QtQuick 2.2
 import QtQuick.Controls 1.1
-import UM 1.2 as UM
 import "."
 
 Item
@@ -9,6 +8,8 @@ Item
     property var txt: assistant.strings
     property string pendingId: ""
     property string pendingName: ""
+    readonly property int columnX: Math.round((width - columnWidth) / 2)
+    readonly property int columnWidth: Math.min(width - 2 * Style.s3, Style.readableWidth)
 
     ConfirmDialog
     {
@@ -41,23 +42,26 @@ Item
     Column
     {
         id: top
-        x: Style.margin
-        y: Style.margin
-        width: parent.width - 2 * Style.margin
-        spacing: Style.narrow
+        width: Math.min(parent.width - 2 * Style.s3, Style.readableWidth)
+        x: Math.round((parent.width - width) / 2)
+        y: Style.s3
+        spacing: Style.s2
 
         Item
         {
             width: parent.width
             height: newButton.height
 
-            SectionTitle
+            Text
             {
                 anchors.left: parent.left
                 anchors.right: newButton.left
+                anchors.rightMargin: Style.s3
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - newButton.width - Style.margin
                 text: txt.proj_title
+                font: Style.headline
+                color: Style.text
+                elide: Text.ElideRight
             }
 
             AButton
@@ -67,8 +71,8 @@ Item
                 variant: "primary"
                 iconName: "plus"
                 text: txt.proj_new
-                enabled: !assistant.running
-                tooltip: assistant.running ? txt.proj_busy : ""
+                enabled: !assistant.busy
+                tooltip: enabled ? "" : txt.proj_busy
                 onClicked: newDialog.ask()
             }
         }
@@ -77,7 +81,7 @@ Item
         {
             width: parent.width
             text: txt.proj_hint
-            font: Style.fontSmall
+            font: Style.small
             color: Style.textSecondary
             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         }
@@ -85,21 +89,34 @@ Item
         Rectangle
         {
             width: parent.width
-            visible: assistant.running
-            height: visible ? busyText.height + 2 * Style.narrow : 0
+            visible: assistant.busy
+            height: visible ? busyRow.height + 2 * Style.s2 : 0
             radius: Style.radius
-            color: Style.warningTint
+            color: Style.warningSoft
 
-            Text
+            Row
             {
-                id: busyText
-                x: Style.narrow
-                y: Style.narrow
-                width: parent.width - 2 * Style.narrow
-                text: txt.proj_busy
-                font: Style.fontSmall
-                color: Style.text
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                id: busyRow
+                x: Style.s3
+                y: Style.s2
+                width: parent.width - 2 * Style.s3
+                spacing: Style.s2
+
+                Icon
+                {
+                    name: "info"
+                    size: Style.iconSmall
+                    color: Style.warning
+                }
+
+                Text
+                {
+                    width: parent.width - Style.iconSmall - Style.s2
+                    text: txt.proj_busy
+                    font: Style.small
+                    color: Style.text
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                }
             }
         }
     }
@@ -107,12 +124,12 @@ Item
     Text
     {
         anchors.top: top.bottom
-        anchors.topMargin: Style.wide
-        x: Style.margin
-        width: parent.width - 2 * Style.margin
+        anchors.topMargin: Style.s6
+        x: top.x
+        width: top.width
         visible: assistant.projectModel.count == 0
         text: txt.proj_empty
-        font: Style.font
+        font: Style.body
         color: Style.textSecondary
         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         horizontalAlignment: Text.AlignHCenter
@@ -121,19 +138,20 @@ Item
     ScrollView
     {
         anchors.top: top.bottom
-        anchors.topMargin: Style.narrow
+        anchors.topMargin: Style.s3
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        style: UM.Theme.styles.scrollview
+        style: Style.scrollStyle
+        horizontalScrollBarPolicy: Qt.ScrollBarAlwaysOff
         visible: assistant.projectModel.count > 0
 
         ListView
         {
             id: list
             model: assistant.projectModel
-            spacing: Style.narrow
-            bottomMargin: Style.margin
+            spacing: Style.px(2)
+            bottomMargin: Style.s3
             boundsBehavior: Flickable.StopAtBounds
 
             delegate: Item
@@ -144,46 +162,98 @@ Item
                 Rectangle
                 {
                     id: row
-                    property bool locked: assistant.running && !model.current
-                    x: Style.margin
-                    width: parent.width - 2 * Style.margin
-                    height: Math.max(info.height, actions.height) + 2 * Style.narrow
+                    property bool locked: assistant.busy && !model.current
+                    property bool hot: rowMouse.containsMouse || renameButton.hovered || deleteButton.hovered
+                    x: page.columnX
+                    width: page.columnWidth
+                    height: Math.max(info.height, Style.controlHeight) + 2 * Style.s3
                     radius: Style.radius
-                    color: model.current ? Style.primaryTint : (rowMouse.containsMouse ? Style.panel : Style.background)
-                    border.width: Style.lineWidth
-                    border.color: model.current ? Style.primary : Style.hairline
+                    color: model.current ? Style.accentSoft : (row.hot ? Style.surface : "transparent")
+                    activeFocusOnTab: true
+                    Keys.onReturnPressed: if (!row.locked) assistant.openProject(model.id)
+                    Keys.onSpacePressed: if (!row.locked) assistant.openProject(model.id)
+                    border.width: activeFocus ? Style.focusWidth : 0
+                    border.color: Style.focusRing
 
                     MouseArea
                     {
                         id: rowMouse
                         anchors.fill: parent
                         hoverEnabled: true
-                        cursorShape: row.locked ? Qt.ArrowCursor : Qt.PointingHandCursor
-                        onDoubleClicked: if (!row.locked) assistant.openProject(model.id)
+                        cursorShape: row.locked ? Qt.ForbiddenCursor : Qt.PointingHandCursor
+                        onClicked:
+                        {
+                            if (model.current)
+                                assistant.showTab("chat")
+                            else if (!row.locked)
+                                assistant.openProject(model.id)
+                        }
+                    }
+
+                    HoverTip
+                    {
+                        area: rowMouse
+                        text: row.locked ? txt.proj_busy : model.name
+                    }
+
+                    Rectangle
+                    {
+                        id: badge
+                        x: Style.s3
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Style.px(32)
+                        height: width
+                        radius: Style.radius
+                        color: model.current ? Style.surface : Style.surfaceAlt
+
+                        Icon
+                        {
+                            anchors.centerIn: parent
+                            name: "folder"
+                            color: model.current ? Style.accent : Style.textSecondary
+                        }
                     }
 
                     Column
                     {
                         id: info
-                        x: Style.margin
+                        anchors.left: badge.right
+                        anchors.leftMargin: Style.s3
+                        anchors.right: actions.left
+                        anchors.rightMargin: Style.s2
                         anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - actions.width - 3 * Style.margin
+                        spacing: Style.px(2)
 
-                        Text
+                        Row
                         {
                             width: parent.width
-                            text: model.name
-                            font: Style.fontBold
-                            color: Style.text
-                            elide: Text.ElideRight
+                            spacing: Style.s2
+
+                            Text
+                            {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Math.min(implicitWidth, parent.width - (currentPill.visible ? currentPill.width + Style.s2 : 0))
+                                text: model.name
+                                font: Style.bodyStrong
+                                color: row.locked ? Style.textMuted : Style.text
+                                elide: Text.ElideRight
+                            }
+
+                            Pill
+                            {
+                                id: currentPill
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: model.current
+                                tone: "accent"
+                                text: txt.proj_current_badge
+                            }
                         }
 
                         Text
                         {
                             width: parent.width
-                            text: txt.proj_updated.replace("%s", model.updated) + "  ·  " + txt.messages_count.replace("%d", model.messages)
-                                  + (model.current ? "  ·  " + txt.proj_current : "")
-                            font: Style.fontSmall
+                            text: model.updated + "  ·  " + txt.messages_count.replace("%d", model.messages)
+                            font: Style.small
                             color: Style.textSecondary
                             elide: Text.ElideRight
                         }
@@ -193,21 +263,14 @@ Item
                     {
                         id: actions
                         anchors.right: parent.right
-                        anchors.rightMargin: Style.narrow
+                        anchors.rightMargin: Style.s2
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: Math.round(Style.narrow / 2)
-
-                        AButton
-                        {
-                            compact: true
-                            text: model.current ? txt.tab_chat : txt.open
-                            enabled: !row.locked
-                            tooltip: row.locked ? txt.proj_busy : ""
-                            onClicked: model.current ? assistant.showTab("chat") : assistant.openProject(model.id)
-                        }
+                        spacing: Style.px(2)
+                        opacity: row.hot || row.activeFocus || renameButton.activeFocus || deleteButton.activeFocus ? 1 : 0.55
 
                         IconButton
                         {
+                            id: renameButton
                             iconName: "pencil"
                             tooltip: txt.rename
                             onClicked:
@@ -219,10 +282,11 @@ Item
 
                         IconButton
                         {
-                            iconName: "cross1"
-                            danger: true
-                            tooltip: txt.delete
-                            enabled: !(assistant.running && model.current)
+                            id: deleteButton
+                            iconName: "trash"
+                            tone: "danger"
+                            tooltip: enabled ? txt.delete : txt.proj_busy
+                            enabled: !(assistant.busy && model.current)
                             onClicked:
                             {
                                 page.pendingId = model.id

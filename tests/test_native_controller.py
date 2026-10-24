@@ -126,7 +126,7 @@ class ControllerTest(unittest.TestCase):
 
     def test_attachment_validation(self):
         toasts = []
-        self.controller.toast.connect(toasts.append)
+        self.controller.notify.connect(lambda kind, message: toasts.append(kind))
         self.assertFalse(self.controller.addFile(write_file("virus.exe")))
         self.assertFalse(self.controller.addFile(os.path.join(tempfile.mkdtemp(), "missing.stl")))
         self.assertFalse(self.controller.addFile(write_file("empty.obj", b"")))
@@ -136,7 +136,7 @@ class ControllerTest(unittest.TestCase):
         good = write_file("ok.obj")
         self.assertTrue(self.controller.addFile(good))
         self.assertFalse(self.controller.addFile(good))
-        self.assertEqual(len(toasts), 5)
+        self.assertEqual(toasts, ["warning"] * 4 + ["success", "warning"])
         self.assertEqual(self.controller.attachmentModel.count, 1)
 
     def test_remove_attachment(self):

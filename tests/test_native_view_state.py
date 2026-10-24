@@ -55,7 +55,8 @@ class ViewStateTest(unittest.TestCase):
         self.assertEqual(state.items[0]["status"], "running")
         self.assertEqual(state.slice["state"], "slicing")
         state.apply({"type": "slice_progress", "data": {"progress": 0.5}})
-        self.assertEqual(state.status_text(), "Выполняю: Слайсинг")
+        self.assertEqual(state.status_text(), "Выполняю слайсинг…")
+        self.assertEqual(state.items[0]["title"], "Выполняю слайсинг")
         state.running = True
         self.assertEqual(state.status_text(), "Слайсинг 50 %")
         state.apply({"type": "tool_result", "data": {"call_id": "a", "name": "slice", "ok": True,

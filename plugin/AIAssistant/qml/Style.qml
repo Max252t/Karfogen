@@ -1,46 +1,117 @@
 pragma Singleton
 import QtQuick 2.2
+import QtQuick.Controls.Styles 1.1
 import UM 1.2 as UM
 
 QtObject
 {
     readonly property real scale: screenScaleFactor
 
-    readonly property color background: UM.Theme.getColor("sidebar")
-    readonly property color panel: UM.Theme.getColor("secondary")
-    readonly property color lining: UM.Theme.getColor("lining")
-    readonly property color hairline: UM.Theme.getColor("monitor_lining_light")
-    readonly property color text: UM.Theme.getColor("text")
-    readonly property color textSecondary: UM.Theme.getColor("text_medium")
-    readonly property color textMuted: UM.Theme.getColor("text_inactive")
-    readonly property color primary: UM.Theme.getColor("primary")
-    readonly property color primaryHover: UM.Theme.getColor("primary_hover")
-    readonly property color primaryText: UM.Theme.getColor("primary_text")
-    readonly property color primaryTint: Qt.rgba(primary.r, primary.g, primary.b, 0.09)
-    readonly property color danger: UM.Theme.getColor("status_stopped")
-    readonly property color dangerTint: Qt.rgba(danger.r, danger.g, danger.b, 0.08)
-    readonly property color warning: UM.Theme.getColor("setting_validation_warning_background")
-    readonly property color warningTint: Qt.rgba(warning.r, warning.g, warning.b, 0.10)
-    readonly property color success: UM.Theme.getColor("status_ready")
-    readonly property color progressTrack: UM.Theme.getColor("progressbar_background")
-    readonly property color progressFill: UM.Theme.getColor("primary")
-    readonly property color field: UM.Theme.getColor("setting_control")
-    readonly property color fieldBorder: UM.Theme.getColor("setting_control_border")
-    readonly property color fieldFocus: UM.Theme.getColor("setting_control_border_highlight")
-    readonly property color toastBackground: UM.Theme.getColor("sidebar_header_bar")
-    readonly property color toastText: UM.Theme.getColor("sidebar_header_text_active")
+    function px(value)
+    {
+        return Math.round(value * scale)
+    }
 
-    readonly property int margin: UM.Theme.getSize("default_margin").width
-    readonly property int narrow: UM.Theme.getSize("narrow_margin").width
-    readonly property int wide: UM.Theme.getSize("wide_margin").width
-    readonly property int lineWidth: Math.max(1, UM.Theme.getSize("default_lining").width)
-    readonly property int radius: Math.round(4 * scale)
-    readonly property int controlHeight: UM.Theme.getSize("setting_control").height
-    readonly property int icon: UM.Theme.getSize("small_button_icon").width
-    readonly property int smallIcon: Math.round(UM.Theme.getSize("small_button_icon").width * 0.75)
+    readonly property color window: "#F5F6F8"
+    readonly property color surface: "#FFFFFF"
+    readonly property color surfaceAlt: "#EEF0F3"
+    readonly property color surfaceHover: "#E6E9ED"
+    readonly property color surfacePressed: "#DCE0E5"
+    readonly property color border: "#DCE0E5"
+    readonly property color borderStrong: "#C3CAD2"
 
-    readonly property font font: UM.Theme.getFont("default")
-    readonly property font fontBold: UM.Theme.getFont("default_bold")
-    readonly property font fontHeading: UM.Theme.getFont("medium_bold")
-    readonly property font fontSmall: UM.Theme.getFont("very_small")
+    readonly property color text: "#1D2329"
+    readonly property color textSecondary: "#56606B"
+    readonly property color textMuted: "#7F8994"
+    readonly property color textDisabled: "#9BA3AC"
+    readonly property color textOnAccent: "#FFFFFF"
+
+    readonly property color accent: UM.Theme.getColor("primary")
+    readonly property color accentHover: Qt.darker(accent, 1.12)
+    readonly property color accentPressed: Qt.darker(accent, 1.25)
+    readonly property color accentSoft: Qt.rgba(accent.r, accent.g, accent.b, 0.10)
+    readonly property color accentSoftHover: Qt.rgba(accent.r, accent.g, accent.b, 0.16)
+    readonly property color focusRing: Qt.rgba(accent.r, accent.g, accent.b, 0.45)
+
+    readonly property color success: "#1E7F45"
+    readonly property color successSoft: "#E6F4EC"
+    readonly property color warning: "#9A5B00"
+    readonly property color warningSoft: "#FDF1DE"
+    readonly property color danger: "#C0362C"
+    readonly property color dangerSoft: "#FCEBEA"
+    readonly property color dangerSoftHover: "#F8DCDA"
+    readonly property color userBubble: Qt.rgba(accent.r, accent.g, accent.b, 0.08)
+    readonly property color toast: "#2B323A"
+    readonly property color toastText: "#FFFFFF"
+
+    readonly property int s1: px(4)
+    readonly property int s2: px(8)
+    readonly property int s3: px(12)
+    readonly property int s4: px(16)
+    readonly property int s5: px(24)
+    readonly property int s6: px(32)
+
+    readonly property int radiusSmall: px(6)
+    readonly property int radius: px(8)
+    readonly property int radiusLarge: px(12)
+
+    readonly property int controlHeight: px(32)
+    readonly property int controlSmall: px(28)
+    readonly property int controlLarge: px(36)
+    readonly property int iconSize: px(16)
+    readonly property int iconSmall: px(14)
+    readonly property int line: Math.max(1, px(1))
+    readonly property int focusWidth: Math.max(2, px(2))
+    readonly property int readableWidth: px(720)
+
+    readonly property string family: UM.Theme.getFont("default").family
+    readonly property int sizeCaption: px(11)
+    readonly property int sizeSmall: px(12)
+    readonly property int sizeBody: px(13)
+    readonly property int sizeReading: px(14)
+    readonly property int sizeTitle: px(15)
+    readonly property int sizeHeadline: px(19)
+    readonly property int sizeMetric: px(20)
+
+    readonly property font caption: Qt.font({"family": family, "pixelSize": sizeCaption})
+    readonly property font small: Qt.font({"family": family, "pixelSize": sizeSmall})
+    readonly property font smallStrong: Qt.font({"family": family, "pixelSize": sizeSmall, "weight": Font.DemiBold})
+    readonly property font body: Qt.font({"family": family, "pixelSize": sizeBody})
+    readonly property font bodyStrong: Qt.font({"family": family, "pixelSize": sizeBody, "weight": Font.DemiBold})
+    readonly property font reading: Qt.font({"family": family, "pixelSize": sizeReading})
+    readonly property font title: Qt.font({"family": family, "pixelSize": sizeTitle, "weight": Font.DemiBold})
+    readonly property font headline: Qt.font({"family": family, "pixelSize": sizeHeadline, "weight": Font.DemiBold})
+    readonly property font metric: Qt.font({"family": family, "pixelSize": sizeMetric, "weight": Font.DemiBold})
+    readonly property font mono: Qt.font({"family": "Consolas", "pixelSize": sizeSmall})
+
+    readonly property int hoverMs: 90
+
+    property Component scrollStyle: Component
+    {
+        ScrollViewStyle
+        {
+            transientScrollBars: false
+            decrementControl: Item { }
+            incrementControl: Item { }
+            corner: Item { }
+            scrollBarBackground: Item
+            {
+                implicitWidth: px(10)
+                implicitHeight: px(10)
+            }
+            handle: Item
+            {
+                implicitWidth: px(10)
+                implicitHeight: px(10)
+
+                Rectangle
+                {
+                    anchors.fill: parent
+                    anchors.margins: px(2)
+                    radius: px(3)
+                    color: styleData.pressed ? "#8C96A0" : (styleData.hovered ? "#A7B0B9" : "#C6CDD4")
+                }
+            }
+        }
+    }
 }

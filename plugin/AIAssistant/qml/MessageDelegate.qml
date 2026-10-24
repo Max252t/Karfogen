@@ -1,5 +1,4 @@
 import QtQuick 2.2
-import UM 1.2 as UM
 import "."
 
 Item
@@ -9,34 +8,34 @@ Item
     property bool expanded: false
     property string metaText: model.meta
     property string actionsText: model.actions
-    property int contentWidth: width - 2 * Style.margin
-    property int maxBubble: Math.round(contentWidth * 0.85)
+    property string kindText: model.kind
+    readonly property int inset: Math.max(Style.s4, Math.round((width - Style.readableWidth) / 2))
+    readonly property int contentWidth: Math.max(0, width - 2 * inset)
+    readonly property bool compactRow: kindText == "tool"
 
-    width: ListView.view ? ListView.view.width : 0
-    height: loader.height + Style.narrow
+    height: loader.y + loader.height + (compactRow ? Style.px(2) : Style.s2)
 
     function actionList()
     {
         return entry.actionsText ? entry.actionsText.split(",") : []
     }
 
-    function kindIcon(kind)
+    function fileIcon(kind)
     {
         if (kind == "image")
-            return "view_normal"
-        if (kind == "scene")
-            return "view_3d"
-        return "load"
+            return "image"
+        return "cube"
     }
 
     Loader
     {
         id: loader
-        x: Style.margin
+        x: entry.inset
+        y: entry.compactRow ? 0 : Style.s2
         width: entry.contentWidth
         sourceComponent:
         {
-            switch (model.kind)
+            switch (entry.kindText)
             {
                 case "user": return userComponent
                 case "tool": return toolComponent
@@ -55,7 +54,7 @@ Item
         Flow
         {
             width: parent ? parent.width : 0
-            spacing: Style.narrow
+            spacing: Style.s2
             visible: entry.actionList().length > 0
 
             Repeater
@@ -64,10 +63,11 @@ Item
 
                 AButton
                 {
-                    compact: true
+                    size: "small"
                     variant: index == 0 ? "primary" : "secondary"
                     text: entry.txt["act_" + modelData] || modelData
-                    enabled: modelData == "settings" || modelData == "pick_file" || !assistant.running
+                    enabled: modelData == "settings" || modelData == "pick_file" || !assistant.busy
+                    tooltip: enabled ? "" : entry.txt.busy_hint
                     onClicked: assistant.runAction(modelData)
                 }
             }
@@ -76,53 +76,28 @@ Item
 
     Component
     {
-        id: detailsBlock
+        id: detailsBox
 
-        Column
+        Rectangle
         {
             width: parent ? parent.width : 0
-            spacing: Style.narrow
-            visible: model.details != ""
+            height: detailsText.height + 2 * Style.s3
+            radius: Style.radius
+            color: Style.surfaceAlt
 
-            Text
+            TextEdit
             {
-                text: entry.expanded ? entry.txt.hide_details + " ▴" : entry.txt.details + " ▾"
-                font: Style.fontSmall
-                color: detailsMouse.containsMouse ? Style.primaryHover : Style.primary
-
-                MouseArea
-                {
-                    id: detailsMouse
-                    anchors.fill: parent
-                    anchors.margins: -Style.narrow
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: entry.expanded = !entry.expanded
-                }
-            }
-
-            Rectangle
-            {
-                visible: entry.expanded
-                width: parent.width
-                height: visible ? detailsText.height + 2 * Style.narrow : 0
-                color: Style.panel
-                radius: Style.radius
-
-                TextEdit
-                {
-                    id: detailsText
-                    x: Style.narrow
-                    y: Style.narrow
-                    width: parent.width - 2 * Style.narrow
-                    text: entry.expanded ? model.details : ""
-                    readOnly: true
-                    selectByMouse: true
-                    wrapMode: TextEdit.WrapAnywhere
-                    font.family: "Consolas"
-                    font.pixelSize: Math.round(11 * Style.scale)
-                    color: Style.textSecondary
-                }
+                id: detailsText
+                x: Style.s3
+                y: Style.s3
+                width: parent.width - 2 * Style.s3
+                text: model.details
+                readOnly: true
+                selectByMouse: true
+                wrapMode: TextEdit.WrapAnywhere
+                font: Style.mono
+                color: Style.textSecondary
+                selectionColor: Style.accent
             }
         }
     }
@@ -136,42 +111,54 @@ Item
             width: entry.contentWidth
             height: bubble.height
 
+            Text
+            {
+                id: measure
+                visible: false
+                text: model.text
+                textFormat: Text.StyledText
+                font: Style.reading
+            }
+
             Rectangle
             {
                 id: bubble
                 anchors.right: parent.right
-                width: Math.min(entry.maxBubble, Math.max(userText.implicitWidth, metaFlow.implicitWidth, modeLabel.implicitWidth)
-                                + 2 * Style.margin)
-                height: userColumn.height + 2 * Style.narrow
-                radius: Style.radius
-                color: Style.primaryTint
+                width: Math.min(Math.round(entry.contentWidth * 0.86),
+                                Math.max(measure.implicitWidth + Style.px(2), files.implicitWidth, modePill.visible ? modePill.width : 0)
+                                + 2 * Style.s3)
+                height: userColumn.height + 2 * Style.s2 + Style.px(2)
+                radius: Style.radiusLarge
+                color: Style.userBubble
 
                 Column
                 {
                     id: userColumn
-                    x: Style.margin
-                    y: Style.narrow
-                    width: parent.width - 2 * Style.margin
-                    spacing: Style.narrow
+                    x: Style.s3
+                    y: Style.s2 + Style.px(1)
+                    width: parent.width - 2 * Style.s3
+                    spacing: Style.s2
 
-                    Text
+                    TextEdit
                     {
-                        id: userText
                         width: parent.width
                         visible: model.text != ""
                         text: model.text
-                        textFormat: Text.StyledText
-                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                        font: Style.font
+                        textFormat: TextEdit.RichText
+                        readOnly: true
+                        selectByMouse: true
+                        wrapMode: TextEdit.Wrap
+                        font: Style.reading
                         color: Style.text
+                        selectionColor: Style.accent
                     }
 
-                    Flow
+                    Column
                     {
-                        id: metaFlow
+                        id: files
                         width: parent.width
-                        spacing: Style.narrow
-                        visible: model.meta != ""
+                        spacing: Style.s1
+                        visible: entry.metaText != ""
 
                         Repeater
                         {
@@ -179,40 +166,36 @@ Item
 
                             Row
                             {
-                                spacing: Math.round(Style.narrow / 2)
                                 property var parts: modelData.split("|")
+                                spacing: Style.s2
 
-                                UM.RecolorImage
+                                Icon
                                 {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: Style.smallIcon
-                                    height: Style.smallIcon
-                                    sourceSize.width: width
-                                    sourceSize.height: height
-                                    source: UM.Theme.getIcon(entry.kindIcon(parent.parts[0]))
-                                    color: Style.primary
+                                    name: entry.fileIcon(parent.parts[0])
+                                    size: Style.iconSmall
+                                    color: Style.accent
                                 }
 
                                 Text
                                 {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: parent.parts.length > 1 ? parent.parts[1] : modelData
-                                    font: Style.fontSmall
-                                    color: Style.primary
+                                    font: Style.small
+                                    color: Style.textSecondary
                                     elide: Text.ElideMiddle
-                                    width: Math.min(implicitWidth, userColumn.width - Style.smallIcon - Style.narrow)
+                                    width: Math.min(implicitWidth, userColumn.width - Style.iconSmall - Style.s2)
                                 }
                             }
                         }
                     }
 
-                    Text
+                    Pill
                     {
-                        id: modeLabel
+                        id: modePill
                         visible: model.summary != ""
-                        text: entry.txt.mode_fixed_hint.replace("%s", model.summary)
-                        font: Style.fontSmall
-                        color: Style.textSecondary
+                        tone: "accent"
+                        text: entry.txt.mode_label + ": " + model.summary
                     }
                 }
             }
@@ -223,23 +206,17 @@ Item
     {
         id: assistantComponent
 
-        Item
+        TextEdit
         {
             width: entry.contentWidth
-            height: assistantText.height
-
-            TextEdit
-            {
-                id: assistantText
-                width: Math.round(entry.contentWidth * 0.95)
-                text: model.text
-                textFormat: TextEdit.RichText
-                readOnly: true
-                selectByMouse: true
-                wrapMode: TextEdit.Wrap
-                font: Style.font
-                color: model.summary == "intermediate" ? Style.textSecondary : Style.text
-            }
+            text: model.text
+            textFormat: TextEdit.RichText
+            readOnly: true
+            selectByMouse: true
+            wrapMode: TextEdit.Wrap
+            font: Style.reading
+            color: model.summary == "intermediate" ? Style.textSecondary : Style.text
+            selectionColor: Style.accent
         }
     }
 
@@ -247,96 +224,124 @@ Item
     {
         id: toolComponent
 
-        Rectangle
+        Column
         {
             width: entry.contentWidth
-            height: toolColumn.height + 2 * Style.narrow
-            radius: Style.radius
-            color: Style.background
-            border.width: Style.lineWidth
-            border.color: model.status == "error" ? Style.danger : Style.hairline
+            spacing: Style.s2
 
-            Column
+            Item
             {
-                id: toolColumn
-                x: Style.margin
-                y: Style.narrow
-                width: parent.width - 2 * Style.margin
-                spacing: Math.round(Style.narrow / 2)
+                id: row
+                width: parent.width
+                height: Style.controlSmall
+                activeFocusOnTab: model.details != ""
+                Keys.onSpacePressed: entry.expanded = !entry.expanded
+                Keys.onReturnPressed: entry.expanded = !entry.expanded
 
-                Item
+                Rectangle
                 {
-                    width: parent.width
-                    height: Math.max(statusIcon.height, titleText.height)
+                    anchors.fill: parent
+                    anchors.leftMargin: -Style.s2
+                    anchors.rightMargin: -Style.s2
+                    radius: Style.radius
+                    color: rowMouse.containsMouse || entry.expanded ? Style.surfaceAlt : "transparent"
+                    border.width: row.activeFocus ? Style.focusWidth : 0
+                    border.color: Style.focusRing
+                }
 
-                    Spinner
-                    {
-                        id: spinnerIcon
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: model.status == "running"
-                    }
+                Spinner
+                {
+                    id: spinner
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: model.status == "running"
+                }
 
-                    UM.RecolorImage
-                    {
-                        id: statusIcon
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: model.status != "running"
-                        width: Style.smallIcon
-                        height: Style.smallIcon
-                        sourceSize.width: width
-                        sourceSize.height: height
-                        source: UM.Theme.getIcon(model.status == "error" ? "warning" : "check-outline")
-                        color: model.status == "error" ? Style.danger : Style.primary
-                    }
-
-                    Text
-                    {
-                        id: titleText
-                        anchors.left: statusIcon.right
-                        anchors.leftMargin: Style.narrow
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Math.min(implicitWidth, parent.width * 0.5)
-                        text: model.title
-                        font: Style.fontBold
-                        color: Style.text
-                        elide: Text.ElideRight
-                    }
-
-                    Text
-                    {
-                        anchors.left: titleText.right
-                        anchors.leftMargin: Style.narrow
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: model.summary
-                        font: Style.font
-                        color: model.status == "error" ? Style.danger : Style.textSecondary
-                        elide: Text.ElideRight
-                    }
+                Icon
+                {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: model.status != "running"
+                    name: model.status == "error" ? "alert" : "check"
+                    color: model.status == "error" ? Style.danger : Style.success
                 }
 
                 Text
                 {
-                    width: parent.width
-                    visible: model.status == "error" && model.impact != ""
-                    text: model.impact
-                    font: Style.fontSmall
-                    color: Style.textSecondary
-                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                    id: titleText
+                    anchors.left: spinner.right
+                    anchors.leftMargin: Style.s2
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, row.width * 0.55)
+                    text: model.title + (model.status == "running" ? "…" : "")
+                    font: model.status == "ok" ? Style.body : Style.bodyStrong
+                    color: model.status == "error" ? Style.danger : (model.status == "running" ? Style.text : Style.textSecondary)
+                    elide: Text.ElideRight
                 }
 
-                Loader
+                Text
                 {
-                    width: parent.width
-                    sourceComponent: actionRow
-                    active: model.actions != ""
+                    anchors.left: titleText.right
+                    anchors.leftMargin: Style.s2
+                    anchors.right: chevron.left
+                    anchors.rightMargin: Style.s2
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: model.summary
+                    font: Style.small
+                    color: model.status == "error" ? Style.danger : Style.textMuted
+                    elide: Text.ElideRight
                 }
 
-                Loader
+                Icon
                 {
-                    width: parent.width
-                    sourceComponent: detailsBlock
+                    id: chevron
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: model.details != "" && (rowMouse.containsMouse || entry.expanded || row.activeFocus)
+                    name: entry.expanded ? "chevron-down" : "chevron-right"
+                    size: Style.iconSmall
                 }
+
+                MouseArea
+                {
+                    id: rowMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: model.details != "" ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: if (model.details != "") entry.expanded = !entry.expanded
+                }
+
+                HoverTip
+                {
+                    area: rowMouse
+                    text: model.details != "" ? (entry.expanded ? entry.txt.hide_details : entry.txt.details) : ""
+                }
+            }
+
+            Text
+            {
+                x: Style.iconSize + Style.s2
+                width: parent.width - x
+                visible: model.status == "error" && model.impact != ""
+                text: model.impact
+                font: Style.small
+                color: Style.textSecondary
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+            }
+
+            Loader
+            {
+                x: Style.iconSize + Style.s2
+                width: parent.width - x
+                sourceComponent: actionRow
+                active: entry.actionsText != ""
+                visible: active
+            }
+
+            Loader
+            {
+                width: parent.width
+                sourceComponent: detailsBox
+                active: entry.expanded
+                visible: active
             }
         }
     }
@@ -345,67 +350,89 @@ Item
     {
         id: errorComponent
 
-        Card
+        Rectangle
         {
             width: entry.contentWidth
-            accent: Style.danger
+            height: errorColumn.height + 2 * Style.s4
+            radius: Style.radiusLarge
+            color: Style.dangerSoft
 
-            Row
+            Icon
             {
-                width: parent.width
-                spacing: Style.narrow
+                id: errorIcon
+                x: Style.s4
+                y: Style.s4 + Style.px(1)
+                name: "alert"
+                color: Style.danger
+            }
 
-                UM.RecolorImage
+            Column
+            {
+                id: errorColumn
+                anchors.left: errorIcon.right
+                anchors.leftMargin: Style.s3
+                anchors.right: parent.right
+                anchors.rightMargin: Style.s4
+                y: Style.s4
+                spacing: Style.s2
+
+                Text
                 {
-                    width: Style.icon
-                    height: Style.icon
-                    sourceSize.width: width
-                    sourceSize.height: height
-                    source: UM.Theme.getIcon("warning")
-                    color: Style.danger
+                    width: parent.width
+                    text: model.title
+                    font: Style.bodyStrong
+                    color: Style.text
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                }
+
+                TextEdit
+                {
+                    width: parent.width
+                    text: model.text
+                    textFormat: TextEdit.RichText
+                    readOnly: true
+                    selectByMouse: true
+                    font: Style.body
+                    color: Style.text
+                    wrapMode: TextEdit.Wrap
+                    selectionColor: Style.accent
                 }
 
                 Text
                 {
-                    width: parent.width - Style.icon - Style.narrow
-                    text: model.title
-                    font: Style.fontBold
-                    color: Style.text
+                    width: parent.width
+                    visible: model.impact != ""
+                    text: model.impact
+                    font: Style.small
+                    color: Style.textSecondary
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                 }
-            }
 
-            Text
-            {
-                width: parent.width
-                text: model.text
-                textFormat: Text.StyledText
-                font: Style.font
-                color: Style.text
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-            }
+                Loader
+                {
+                    width: parent.width
+                    sourceComponent: actionRow
+                    active: entry.actionsText != ""
+                    visible: active
+                }
 
-            Text
-            {
-                width: parent.width
-                visible: model.impact != ""
-                text: model.impact
-                font: Style.fontSmall
-                color: Style.textSecondary
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-            }
+                AButton
+                {
+                    visible: model.details != ""
+                    size: "small"
+                    variant: "link"
+                    iconName: entry.expanded ? "chevron-down" : "chevron-right"
+                    text: entry.expanded ? entry.txt.hide_details : entry.txt.details
+                    onClicked: entry.expanded = !entry.expanded
+                }
 
-            Loader
-            {
-                width: parent.width
-                sourceComponent: actionRow
-                active: model.actions != ""
-            }
-
-            Loader
-            {
-                width: parent.width
-                sourceComponent: detailsBlock
+                Loader
+                {
+                    width: parent.width
+                    sourceComponent: detailsBox
+                    active: entry.expanded
+                    visible: active
+                }
             }
         }
     }
@@ -417,16 +444,30 @@ Item
         Column
         {
             width: entry.contentWidth
-            spacing: Style.narrow
+            spacing: Style.s2
 
-            Text
+            Row
             {
-                width: parent.width
-                text: model.text
-                font: Style.font
-                color: Style.textSecondary
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Style.s2
+
+                Icon
+                {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "info"
+                    size: Style.iconSmall
+                    color: Style.textMuted
+                }
+
+                Text
+                {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, entry.contentWidth - Style.iconSmall - Style.s2)
+                    text: model.text
+                    font: Style.small
+                    color: Style.textSecondary
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                }
             }
 
             Loader
@@ -434,7 +475,8 @@ Item
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: item ? item.childrenRect.width : 0
                 sourceComponent: actionRow
-                active: model.actions != ""
+                active: entry.actionsText != ""
+                visible: active
             }
         }
     }
@@ -443,28 +485,55 @@ Item
     {
         id: decisionComponent
 
-        Card
+        Rectangle
         {
             width: entry.contentWidth
-            tinted: true
+            height: decisionColumn.height + 2 * Style.s4
+            radius: Style.radiusLarge
+            color: Style.surface
+            border.width: Style.line
+            border.color: Style.border
 
-            Text
+            Column
             {
-                width: parent.width
-                text: model.title
-                font: Style.fontBold
-                color: Style.text
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-            }
+                id: decisionColumn
+                x: Style.s4
+                y: Style.s4
+                width: parent.width - 2 * Style.s4
+                spacing: Style.s2
 
-            Text
-            {
-                width: parent.width
-                text: model.text
-                textFormat: Text.StyledText
-                font: Style.font
-                color: Style.text
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                Row
+                {
+                    spacing: Style.s2
+
+                    Icon
+                    {
+                        anchors.verticalCenter: parent.verticalCenter
+                        name: "sparkle"
+                        color: Style.accent
+                    }
+
+                    Text
+                    {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: model.title
+                        font: Style.bodyStrong
+                        color: Style.text
+                    }
+                }
+
+                TextEdit
+                {
+                    width: parent.width
+                    text: model.text
+                    textFormat: TextEdit.RichText
+                    readOnly: true
+                    selectByMouse: true
+                    font: Style.body
+                    color: Style.text
+                    wrapMode: TextEdit.Wrap
+                    selectionColor: Style.accent
+                }
             }
         }
     }

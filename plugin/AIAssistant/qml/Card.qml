@@ -5,26 +5,16 @@ Rectangle
 {
     id: card
     default property alias content: inner.children
-    property int inset: Style.margin
-    property color accent: "transparent"
-    property bool tinted: false
+    property int inset: Style.s4
+    property int spacing: Style.s3
+    property bool outlined: false
 
     width: parent ? parent.width : implicitWidth
     height: inner.height + 2 * inset
-    radius: Style.radius
-    color: tinted ? Style.panel : Style.background
-    border.width: Style.lineWidth
-    border.color: Style.hairline
-
-    Rectangle
-    {
-        visible: card.accent.a > 0
-        width: Math.round(3 * Style.scale)
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        color: card.accent
-    }
+    radius: Style.radiusLarge
+    color: Style.surface
+    border.width: outlined ? Style.line : 0
+    border.color: Style.border
 
     Column
     {
@@ -33,6 +23,6 @@ Rectangle
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: card.inset
-        spacing: Style.narrow
+        spacing: card.spacing
     }
 }

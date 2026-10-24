@@ -1,5 +1,4 @@
 import QtQuick 2.2
-import UM 1.2 as UM
 import "."
 
 Item
@@ -11,9 +10,8 @@ Item
     signal toggled(bool checked)
 
     width: parent ? parent.width : implicitWidth
-    height: Math.max(box.height, labels.height)
+    height: Math.max(Style.controlSmall, labels.height)
     activeFocusOnTab: enabled
-    opacity: enabled ? 1.0 : 0.5
 
     function toggle()
     {
@@ -26,23 +24,33 @@ Item
     Rectangle
     {
         id: box
-        width: Math.round(Style.controlHeight * 0.7)
+        y: Math.max(0, (Math.min(row.height, Style.controlSmall) - height) / 2)
+        width: Style.px(18)
         height: width
-        radius: Style.radius
-        color: row.checked ? Style.primary : Style.field
-        border.width: Style.lineWidth
-        border.color: row.activeFocus || mouse.containsMouse ? Style.fieldFocus : (row.checked ? Style.primary : Style.fieldBorder)
+        radius: Style.px(5)
+        color: row.checked ? Style.accent : Style.surface
+        border.width: row.checked ? 0 : Style.line + (mouse.containsMouse ? 0 : 0)
+        border.color: mouse.containsMouse ? Style.accent : Style.borderStrong
+        Behavior on color { ColorAnimation { duration: Style.hoverMs } }
 
-        UM.RecolorImage
+        Rectangle
+        {
+            anchors.fill: parent
+            anchors.margins: -Style.focusWidth - Style.px(1)
+            radius: parent.radius + Style.focusWidth
+            color: "transparent"
+            border.width: Style.focusWidth
+            border.color: Style.focusRing
+            visible: row.activeFocus
+        }
+
+        Icon
         {
             anchors.centerIn: parent
-            width: Math.round(parent.width * 0.6)
-            height: width
-            sourceSize.width: width
-            sourceSize.height: height
             visible: row.checked
-            source: UM.Theme.getIcon("check-outline")
-            color: Style.primaryText
+            name: "check"
+            size: Style.iconSmall
+            color: Style.textOnAccent
         }
     }
 
@@ -50,15 +58,18 @@ Item
     {
         id: labels
         anchors.left: box.right
-        anchors.leftMargin: Style.narrow
+        anchors.leftMargin: Style.s2 + Style.px(2)
         anchors.right: parent.right
+        y: Math.max(0, (Style.controlSmall - first.height) / 2)
+        spacing: Style.px(2)
 
         Text
         {
+            id: first
             width: parent.width
             text: row.text
-            font: Style.font
-            color: Style.text
+            font: Style.body
+            color: row.enabled ? Style.text : Style.textMuted
             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         }
 
@@ -67,7 +78,7 @@ Item
             width: parent.width
             visible: row.secondary != ""
             text: row.secondary
-            font: Style.fontSmall
+            font: Style.small
             color: Style.textSecondary
             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         }

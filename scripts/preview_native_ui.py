@@ -1,17 +1,27 @@
 import argparse
 import os
 import sys
+import tempfile
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 
 import qml_harness
+from PyQt5.QtGui import QColor, QImage
 
 
 def pump(app, rounds=8):
     for _ in range(rounds):
         app.processEvents()
+
+
+def visual_items(root):
+    stack = [root]
+    while stack:
+        item = stack.pop(0)
+        yield item
+        stack.extend(item.childItems())
 
 
 def grab(app, window, path):
@@ -90,6 +100,45 @@ def render(out_dir, language, scale, theme_dir=None):
     window.setWidth(int(400 * scale))
     window.setHeight(int(460 * scale))
     shots.append(grab(app, window, os.path.join(out_dir, "09_narrow_%s.png" % suffix)))
+    window.close()
+
+    controller, agent, bus, window, keep = env(objects=[ui_fakes.scene_object("obj1", "gear.stl", 33.1, 10.1, 33.1)])
+    folder = tempfile.mkdtemp()
+    image = QImage(96, 64, QImage.Format_RGB32)
+    image.fill(QColor(206, 132, 72))
+    files = [os.path.join(folder, "photo_of_the_worn_part.png"), os.path.join(folder, "gear_v2.stl"),
+             os.path.join(folder, "assembly_with_a_really_long_descriptive_name_for_the_conveyor_line.3mf")]
+    image.save(files[0])
+    for path in files[1:]:
+        with open(path, "wb") as handle:
+            handle.write(b"solid demo\n" * 300)
+    controller.addFiles(files)
+    controller.setUseScene(True)
+    shots.append(grab(app, window, os.path.join(out_dir, "10_attachments_%s.png" % suffix)))
+
+    long_text = ui_fakes.LONG_ANSWER_RU if language == "ru" else ui_fakes.LONG_ANSWER_EN
+    controller.send("Шестерня" if language == "ru" else "Gear")
+    ui_fakes.publish(bus, ui_fakes.CONVERSATION[3:5])
+    controller.tick()
+    pump(app)
+    for item in visual_items(window.contentItem()):
+        if item.property("kindText") == "tool":
+            item.setProperty("expanded", True)
+            break
+    shots.append(grab(app, window, os.path.join(out_dir, "11_tool_details_%s.png" % suffix)))
+    bus.publish("assistant_message", {"text": long_text})
+    bus.publish("done", {})
+    agent.running = False
+    controller.tick()
+    shots.append(grab(app, window, os.path.join(out_dir, "12_long_answer_%s.png" % suffix)))
+
+    from AIAssistant.server import projects
+    projects.create_project("Корпус редуктора, версия для печати из PETG с усиленными рёбрами жёсткости"
+                            if language == "ru" else "Gearbox housing, PETG print version with reinforced stiffening ribs")
+    projects.create_project("Пыльник ШРУСа" if language == "ru" else "CV joint boot")
+    controller.refreshProjects()
+    controller.showTab.emit("projects")
+    shots.append(grab(app, window, os.path.join(out_dir, "13_projects_many_%s.png" % suffix)))
     window.close()
     pump(app)
     for item in alive:

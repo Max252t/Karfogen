@@ -1,23 +1,18 @@
 import QtQuick 2.2
-import UM 1.2 as UM
 import "."
 
-UM.RecolorImage
+Icon
 {
     id: spinner
     property bool running: visible
-    width: Style.smallIcon
-    height: Style.smallIcon
-    sourceSize.width: width
-    sourceSize.height: height
-    source: UM.Theme.getIcon("rotate")
-    color: Style.primary
+    name: "spinner"
+    color: Style.accent
 
     RotationAnimation on rotation
     {
         from: 0
         to: 360
-        duration: 1200
+        duration: 900
         loops: Animation.Infinite
         running: spinner.running
     }

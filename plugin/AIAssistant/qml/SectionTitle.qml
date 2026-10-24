@@ -5,42 +5,50 @@ Item
 {
     id: section
     property string text: ""
+    property string hint: ""
     property string badge: ""
+
     width: parent ? parent.width : implicitWidth
-    implicitHeight: title.implicitHeight + Style.narrow
-    height: implicitHeight
+    height: column.height
 
-    Text
+    Column
     {
-        id: title
-        anchors.left: parent.left
-        anchors.right: badgeBox.visible ? badgeBox.left : parent.right
-        anchors.rightMargin: Style.narrow
-        anchors.verticalCenter: parent.verticalCenter
-        text: section.text
-        font: Style.fontHeading
-        color: Style.text
-        elide: Text.ElideRight
-    }
+        id: column
+        width: parent.width
+        spacing: Style.px(2)
 
-    Rectangle
-    {
-        id: badgeBox
-        visible: section.badge != "" && section.badge != "0"
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        width: Math.max(height, badgeText.implicitWidth + Style.margin)
-        height: badgeText.implicitHeight + Style.narrow
-        radius: height / 2
-        color: Style.primaryTint
+        Row
+        {
+            spacing: Style.s2
+
+            Text
+            {
+                text: section.text
+                font: Style.title
+                color: Style.text
+                elide: Text.ElideRight
+                width: Math.min(implicitWidth, section.width - badgeText.width - Style.s2)
+            }
+
+            Text
+            {
+                id: badgeText
+                anchors.baseline: parent.children[0].baseline
+                visible: section.badge != "" && section.badge != "0"
+                text: section.badge
+                font: Style.small
+                color: Style.textMuted
+            }
+        }
 
         Text
         {
-            id: badgeText
-            anchors.centerIn: parent
-            text: section.badge
-            font: Style.fontSmall
-            color: Style.primary
+            width: parent.width
+            visible: section.hint != ""
+            text: section.hint
+            font: Style.small
+            color: Style.textSecondary
+            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         }
     }
 }

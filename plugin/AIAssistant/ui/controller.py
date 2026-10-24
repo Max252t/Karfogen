@@ -100,9 +100,11 @@ class DictListModel(QAbstractListModel):
 
 
 def url_to_path(value):
+    if hasattr(value, "toVariant"):
+        value = value.toVariant()
     if isinstance(value, QUrl):
         return value.toLocalFile()
-    text = str(value or "")
+    text = value.toString() if hasattr(value, "toString") and not isinstance(value, str) else str(value or "")
     if text.startswith("file:"):
         return QUrl(text).toLocalFile()
     return text
@@ -126,6 +128,7 @@ class NativeChatController(QObject):
     connectionChanged = pyqtSignal()
     testFinished = pyqtSignal(bool, str, arguments=["ok", "message"])
     toast = pyqtSignal(str, arguments=["message"])
+    notify = pyqtSignal(str, str, arguments=["kind", "message"])
     showTab = pyqtSignal(str, arguments=["name"])
     openSettingsRequested = pyqtSignal()
     pickFileRequested = pyqtSignal()
@@ -152,7 +155,7 @@ class NativeChatController(QObject):
         self._scene_dirty = True
         self._scene_checked = 0.0
         self._slicer_checked = 0.0
-        self._slicer_setup = {"mode": "", "material": "", "quality": "", "user_changes": 0}
+        self._slicer_setup = {"mode": "", "material": "", "quality": "", "user_changes": 0, "slice": None}
         self._last_request = None
         self._connection = "unchecked"
         self._connection_detail = ""
@@ -200,6 +203,10 @@ class NativeChatController(QObject):
     def t(self, key, *args):
         return strings.text(self._language, key, *args)
 
+    def _notify(self, kind, message):
+        self.toast.emit(message)
+        self.notify.emit(kind, message)
+
     def setWindow(self, window):
         self._window = window
 
@@ -230,6 +237,8 @@ class NativeChatController(QObject):
                 self._after_turn()
         if events:
             self._track_connection(events)
+            if any(e["type"] == "status" and (e.get("data") or {}).get("text") == "slice_state" for e in events):
+                self._slicer_checked = 0.0
         now = time.time()
         if self._scene_dirty and now - self._scene_checked >= SCENE_REFRESH_S:
             self._scene_dirty = False
@@ -357,17 +366,35 @@ class NativeChatController(QObject):
     def toolCount(self):
         return self._state.tool_count
 
+    def slice_view(self):
+        own = dict(self._state.slice)
+        live = self._slicer_setup.get("slice")
+        if live is None or (own["state"] == "slicing" and self._running):
+            own.update({"live": live is not None, "ready": own["state"] == "done", "historical": False})
+            return own
+        view = dict(live)
+        view["live"] = True
+        view["ready"] = live["state"] == "done"
+        view["historical"] = own["state"] == "done" and not view["ready"]
+        if view["historical"]:
+            view.update({"time": own["time"], "length": own["length"], "weight": own["weight"]})
+        return view
+
     @pyqtProperty(str, notify=stateChanged)
     def sliceState(self):
-        return self._state.slice["state"]
+        return self.slice_view()["state"]
 
     @pyqtProperty(float, notify=stateChanged)
     def sliceProgress(self):
-        return float(self._state.slice["progress"])
+        return float(self.slice_view()["progress"])
 
     @pyqtProperty("QVariantMap", notify=stateChanged)
     def sliceInfo(self):
-        return dict(self._state.slice)
+        return self.slice_view()
+
+    @pyqtProperty(str, notify=stateChanged)
+    def appliedMode(self):
+        return self._state.setup.get("mode") or ""
 
     @pyqtProperty("QVariantMap", notify=stateChanged)
     def setup(self):
@@ -432,7 +459,7 @@ class NativeChatController(QObject):
     @pyqtSlot("QVariantMap", result=bool)
     def saveSettings(self, data):
         if self.busy:
-            self.toast.emit(self.t("busy_send"))
+            self._notify("warning", self.t("busy_send"))
             return False
         data = dict(data or {})
         clean = {}
@@ -464,7 +491,7 @@ class NativeChatController(QObject):
         self.settingsChanged.emit()
         self.connectionChanged.emit()
         self._check_language()
-        self.toast.emit(self.t("set_saved"))
+        self._notify("success", self.t("set_saved"))
         return True
 
     @pyqtSlot("QVariantMap")
@@ -556,12 +583,12 @@ class NativeChatController(QObject):
         message = str(error)
         if isinstance(error, projects.ProjectError) and error.status == 409:
             message = self.t("proj_busy")
-        self.toast.emit(message)
+        self._notify("info", message)
 
     @pyqtSlot(bool, result=bool)
     def createProject(self, clear_scene):
         if self._busy_action:
-            self.toast.emit(self.t("proj_busy"))
+            self._notify("warning", self.t("proj_busy"))
             return False
         try:
             self._manager.create(None, prepare=bool(clear_scene))
@@ -579,7 +606,7 @@ class NativeChatController(QObject):
     @pyqtSlot(str, result=bool)
     def openProject(self, project_id):
         if self._busy_action:
-            self.toast.emit(self.t("proj_busy"))
+            self._notify("warning", self.t("proj_busy"))
             return False
         previous = self._manager.current_id
         try:
@@ -594,7 +621,7 @@ class NativeChatController(QObject):
         self.refreshProjects()
         self.tick()
         self.showTab.emit("chat")
-        self.toast.emit(self.t("proj_opened", meta["name"]))
+        self._notify("info", self.t("proj_opened", meta["name"]))
         return True
 
     @pyqtSlot(str, str, result=bool)
@@ -610,7 +637,7 @@ class NativeChatController(QObject):
     @pyqtSlot(str, result=bool)
     def deleteProject(self, project_id):
         if self._busy_action:
-            self.toast.emit(self.t("proj_busy"))
+            self._notify("warning", self.t("proj_busy"))
             return False
         current = project_id == self._manager.current_id
         try:
@@ -630,17 +657,25 @@ class NativeChatController(QObject):
     def urlToPath(self, url):
         return url_to_path(url)
 
-    @pyqtSlot("QVariantList", result=int)
+    @pyqtSlot("QVariant", result=int)
     def addFiles(self, urls):
-        added = 0
+        if hasattr(urls, "toVariant"):
+            urls = urls.toVariant()
+        if isinstance(urls, (str, QUrl)):
+            urls = [urls]
+        added = []
         for value in urls or []:
             if self._add_file(url_to_path(value)):
-                added += 1
-        return added
+                added.append(os.path.basename(url_to_path(value)))
+        if len(added) == 1:
+            self._notify("success", self.t("toast_file_added", added[0]))
+        elif added:
+            self._notify("success", self.t("attached_count", len(added)))
+        return len(added)
 
     @pyqtSlot(str, result=bool)
     def addFile(self, url):
-        return self._add_file(url_to_path(url))
+        return self.addFiles([url]) == 1
 
     def _file_problem(self, path):
         name = os.path.basename(path) or path
@@ -661,12 +696,12 @@ class NativeChatController(QObject):
     def _add_file(self, path):
         problem = self._file_problem(path) if path else self.t("file_missing", "")
         if problem:
-            self.toast.emit(problem)
+            self._notify("warning", problem)
             return False
         try:
             item = uploads.register_file(path)
         except uploads.UploadError as e:
-            self.toast.emit(str(e))
+            self._notify("warning", str(e))
             return False
         self.attachments.append({"id": item["id"], "name": item["name"], "kind": item["kind"],
                                  "size": view_state.format_size(self._language, item["size"]),
@@ -738,6 +773,21 @@ class NativeChatController(QObject):
         self.set_scene_objects(self._scene_objects)
 
     @pyqtProperty(str, notify=sceneChanged)
+    def sceneSubtitle(self):
+        objects = self._scene_objects
+        if len(objects) == 1:
+            return "%s · %s" % (objects[0]["name"], objects[0]["dims"])
+        if self._use_scene:
+            return self.t("scene_selected", len(self.selected_scene_objects()), len(objects))
+        return ", ".join(o["name"] for o in objects)
+
+    @pyqtProperty(str, notify=stateChanged)
+    def requestedMode(self):
+        if self._last_request and self._last_request.get("mode"):
+            return view_state.mode_label(self._last_request["mode"])
+        return ""
+
+    @pyqtProperty(str, notify=sceneChanged)
     def sceneSummary(self):
         selected = self.selected_scene_objects()
         if len(selected) == 1:
@@ -751,8 +801,9 @@ class NativeChatController(QObject):
 
     def _refresh_slicer(self):
         try:
-            from ..tools import settings_tools
+            from ..tools import settings_tools, slice_tools
             setup = settings_tools.current_setup()
+            live = slice_tools.slice_snapshot()
             changed = self._registry.call("get_changed_settings", {}) if self._registry.has("get_changed_settings") \
                 else {"changes": []}
         except Exception:
@@ -760,7 +811,8 @@ class NativeChatController(QObject):
         materials = setup.get("materials") or {}
         material = materials.get("0") or materials.get(0) or (list(materials.values())[0] if materials else "")
         value = {"mode": view_state.mode_label(setup.get("print_mode")), "material": material or "",
-                 "quality": setup.get("quality_type") or "", "user_changes": len(changed.get("changes") or [])}
+                 "quality": setup.get("quality_type") or "", "user_changes": len(changed.get("changes") or []),
+                 "slice": view_state.live_slice(self._language, live)}
         if value != self._slicer_setup:
             self._slicer_setup = value
             return True
@@ -788,7 +840,7 @@ class NativeChatController(QObject):
 
     def _submit(self, request):
         if self.busy:
-            self.toast.emit(self.t("busy_send"))
+            self._notify("warning", self.t("busy_send"))
             return False
         if not llm_client.is_configured():
             self.openSettingsRequested.emit()
@@ -797,13 +849,13 @@ class NativeChatController(QObject):
         try:
             self._manager.ensure_current()
         except Exception as e:
-            self.toast.emit(str(e))
+            self._notify("info", str(e))
             return False
         notes = view_state.scene_note(request["scene"])
         display = {"scene": [o["name"] for o in request["scene"]]}
         ok, status = self._agent.submit(request["text"], request["ids"], None, request["mode"], notes, display)
         if not ok:
-            self.toast.emit(self.t("busy_send"))
+            self._notify("warning", self.t("busy_send"))
             return False
         self._last_request = request
         self._running = True
@@ -862,7 +914,7 @@ class NativeChatController(QObject):
 
     def _tool(self, name, args, title_key, success):
         if self.busy:
-            self.toast.emit(self.t("busy_send"))
+            self._notify("warning", self.t("busy_send"))
             return False
         self._busy_action = name
         self.stateChanged.emit()
@@ -881,7 +933,7 @@ class NativeChatController(QObject):
             else:
                 self._state.add_local_error(title_key, str(value))
                 self._apply_ops(self._state.take_ops())
-                self.toast.emit(self.t(title_key))
+                self._notify("error", self.t(title_key))
             self._slicer_checked = 0.0
             self.tick()
             self._manager.save_current()
@@ -895,7 +947,7 @@ class NativeChatController(QObject):
         if name is None:
             return False
         return self._tool(name, {}, "err_title_export",
-                          lambda value: self.toast.emit(self.t("toast_export", self._last_export_path(kind))))
+                          lambda value: self._notify("success", self.t("toast_export", self._last_export_path(kind))))
 
     def _last_export_path(self, kind):
         self.tick()
@@ -904,9 +956,9 @@ class NativeChatController(QObject):
     @pyqtSlot(result=bool)
     def resetChanges(self):
         if self._running:
-            self.toast.emit(self.t("busy_send"))
+            self._notify("warning", self.t("busy_send"))
             return False
-        return self._tool("reset_settings", {}, "err_title_internal", lambda value: self.toast.emit(self.t("res_reset_done")))
+        return self._tool("reset_settings", {}, "err_title_internal", lambda value: self._notify("success", self.t("res_reset_done")))
 
     def _results_folder(self):
         for kind in ("gcode", "3mf"):
@@ -922,7 +974,7 @@ class NativeChatController(QObject):
         if not os.path.isdir(folder):
             os.makedirs(folder)
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(folder)):
-            self.toast.emit(self.t("toast_folder_fail"))
+            self._notify("error", self.t("toast_folder_fail"))
             return False
         return True
 
@@ -940,7 +992,7 @@ class NativeChatController(QObject):
     @pyqtSlot(result=str)
     def saveScreenshot(self):
         if self._window is None:
-            self.toast.emit(self.t("toast_screenshot_fail"))
+            self._notify("error", self.t("toast_screenshot_fail"))
             return ""
         try:
             image = self._window.grabWindow()
@@ -950,9 +1002,9 @@ class NativeChatController(QObject):
                 raise IOError("grab failed")
         except Exception as e:
             _log("e", "screenshot failed: %s" % e)
-            self.toast.emit(self.t("toast_screenshot_fail"))
+            self._notify("error", self.t("toast_screenshot_fail"))
             return ""
-        self.toast.emit(self.t("toast_screenshot", path))
+        self._notify("success", self.t("toast_screenshot", path))
         return path
 
     @pyqtProperty("QVariantMap", constant=True)

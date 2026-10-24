@@ -191,6 +191,13 @@ def tool_title(language, name):
     return strings.text(language, group)
 
 
+def tool_running_title(language, name):
+    group = tool_group(name)
+    if group is None:
+        return strings.text(language, "tool_other", name)
+    return strings.text(language, "run_" + group)
+
+
 def tool_summary(language, name, result):
     t = lambda key, *args: strings.text(language, key, *args)
     if not isinstance(result, dict):
@@ -235,6 +242,28 @@ def tool_summary(language, name, result):
 
 def _empty_slice():
     return {"state": "idle", "progress": 0.0, "time": "", "length": "", "weight": ""}
+
+
+LIVE_STATES = {"done": "done", "processing": "slicing", "error": "error"}
+
+
+def live_slice(language, snapshot):
+    from ..server.derived_events import TEXTS
+    if not snapshot:
+        return None
+    texts = TEXTS.get(language, TEXTS["en"])
+    view = _empty_slice()
+    view["state"] = LIVE_STATES.get(snapshot.get("state"), "idle")
+    try:
+        view["progress"] = 1.0 if view["state"] == "done" else max(0.0, min(1.0, float(snapshot.get("progress") or 0)))
+    except (TypeError, ValueError):
+        pass
+    if view["state"] == "done":
+        seconds = int(snapshot.get("print_time_s") or 0)
+        view["time"] = texts["time"] % (seconds // 3600, (seconds % 3600) // 60) if seconds else ""
+        view["length"] = texts["m"] % float(snapshot.get("material_m") or 0)
+        view["weight"] = texts["g"] % float(snapshot.get("material_g") or 0)
+    return view
 
 
 class ChatViewState(object):
@@ -353,8 +382,8 @@ class ChatViewState(object):
         self.status = "tool"
         self.status_tool = name
         group = tool_group(name) or ""
-        index = self._append({"kind": "tool", "title": tool_title(self.language, name), "status": "running",
-                              "summary": self.t("tool_running"), "icon": TOOL_ICONS.get(group, "settings"),
+        index = self._append({"kind": "tool", "title": tool_running_title(self.language, name), "status": "running",
+                              "summary": "", "icon": TOOL_ICONS.get(group, "settings"),
                               "meta": name,
                               "details": "%s\n%s" % (self.t("arguments"), _dump(data.get("arguments") or {}))})
         self._tool_index[call_id] = index
@@ -375,7 +404,8 @@ class ChatViewState(object):
         if ok:
             result = data.get("result")
             details = "%s\n\n%s\n%s" % (args_text, self.t("result"), _dump(result))
-            self._update(index, status="ok", summary=tool_summary(self.language, name, result), details=details)
+            self._update(index, status="ok", title=tool_title(self.language, name),
+                         summary=tool_summary(self.language, name, result), details=details)
             if name in MUTATING_TOOLS or (name == "recommend_setup" and isinstance(result, dict) and result.get("applied")):
                 self._turn_changed = True
             self._absorb_result(name, result)
@@ -383,7 +413,7 @@ class ChatViewState(object):
             error = str(data.get("error") or "")
             details = "%s\n\n%s\n%s" % (args_text, self.t("result"), _dump(error))
             actions = "pick_file" if name == "load_model" else ""
-            self._update(index, status="error", summary=error.split("\n")[0][:300], details=details,
+            self._update(index, status="error", title=tool_title(self.language, name), summary=error.split("\n")[0][:300], details=details,
                          impact=self.t("tool_error_hint"), actions=actions)
             if name == "slice":
                 self.slice["state"] = "error"
@@ -414,9 +444,13 @@ class ChatViewState(object):
             return
         previous = self.changes.get(key)
         old = previous["old"] if previous else data.get("old")
-        self.changes[key] = {"key": key, "label": str(data.get("label") or key),
-                             "old": "" if old is None else str(old),
-                             "value": "" if data.get("value") is None else str(data.get("value"))}
+        entry = {"key": key, "label": str(data.get("label") or key),
+                 "old": "" if old is None else str(old),
+                 "value": "" if data.get("value") is None else str(data.get("value"))}
+        if entry["old"] != "" and entry["old"].strip().lower() == entry["value"].strip().lower():
+            self.changes.pop(key, None)
+        else:
+            self.changes[key] = entry
         if key == "print_mode":
             self.setup["mode"] = str(data.get("value") or "")
         elif key == "material":
@@ -477,7 +511,7 @@ class ChatViewState(object):
         if self.slice["state"] == "slicing" and self.running:
             return self.t("run_slicing", int(round(self.slice["progress"] * 100)))
         if self.status == "tool" and self.status_tool:
-            return self.t("run_tool", tool_title(self.language, self.status_tool))
+            return tool_running_title(self.language, self.status_tool) + "…"
         if self.status == "thinking":
             return self.t("run_thinking")
         return self.t("run_working")

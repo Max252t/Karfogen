@@ -131,3 +131,30 @@ FINISH = [
 def publish(bus, events):
     for kind, data in events:
         bus.publish(kind, data)
+
+
+LONG_ANSWER_RU = (
+    "**Готово.** Шестерню печатаем в режиме 3D из PETG с профилем normal.\n\n"
+    "### Почему так\n"
+    "- Деталь работает под нагрузкой, поэтому 4 стенки и 40 % заполнения гироидом.\n"
+    "- Зубья ориентированы горизонтально: так слои не расслаиваются по линии зацепления.\n"
+    "- Поддержки не нужны: нависания 8 %, все меньше 45°.\n\n"
+    "### Что сохранено\n"
+    "Файл `C:/Users/demo/AIAssistantResults/Шестерня_модуль_1.5_z24_с_шпоночным_пазом/result.gcode` "
+    "и проект 3MF рядом с ним.\n\n"
+    "Время печати 2 ч 14 мин, расход 14.6 м (46 г). Если нужна более гладкая поверхность зубьев — "
+    "напишите, переключу профиль на high, время вырастет примерно до 3 ч 40 мин."
+)
+
+LONG_ANSWER_EN = (
+    "**Done.** The gear prints in 3D mode from PETG with the normal profile.\n\n"
+    "### Why\n"
+    "- The part carries load, so 4 walls and 40 % gyroid infill.\n"
+    "- Teeth are oriented horizontally so layers don't split along the contact line.\n"
+    "- No supports: overhangs are 8 %, all below 45°.\n\n"
+    "### Saved files\n"
+    "`C:/Users/demo/AIAssistantResults/gear_module_1.5_z24_with_keyway_slot/result.gcode` "
+    "and the 3MF project next to it.\n\n"
+    "Print time 2 h 14 min, 14.6 m of material (46 g). For smoother teeth ask me to switch to the high "
+    "profile — the time grows to about 3 h 40 min."
+)

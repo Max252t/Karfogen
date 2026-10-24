@@ -9,6 +9,7 @@ ALLOWED_IMPORTS = {
     "QtQuick": "2.2",
     "QtQuick.Controls": "1.1",
     "QtQuick.Controls.Styles": "1.1",
+    "QtQuick.Controls.Private": "1.0",
     "QtQuick.Layouts": "1.1",
     "QtQuick.Dialogs": "1.1",
     "QtQuick.Window": "2.2",

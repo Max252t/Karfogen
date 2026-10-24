@@ -2,17 +2,15 @@ import QtQuick 2.2
 import QtQuick.Controls 1.1
 import QtQuick.Dialogs 1.1
 import QtQuick.Window 2.2
-import UM 1.2 as UM
 import "."
 
 Window
 {
     id: dialog
     property var txt: assistant.strings
-    property bool testing: false
+    property string testState: "idle"
     property string testMessage: ""
-    property bool testOk: false
-    readonly property var languages: ["auto", "ru", "en"]
+    property string language: "auto"
 
     function open()
     {
@@ -24,8 +22,8 @@ Window
         autoExport.checked = s.auto_export !== false
         verifySsl.checked = s.verify_ssl !== false
         resultsDir.text = s.results_dir || ""
-        var index = dialog.languages.indexOf(s.language || "auto")
-        language.currentIndex = index < 0 ? 0 : index
+        dialog.language = s.language || "auto"
+        dialog.testState = "idle"
         dialog.testMessage = ""
         dialog.visible = true
         dialog.requestActivate()
@@ -42,7 +40,7 @@ Window
             "auto_export": autoExport.checked,
             "verify_ssl": verifySsl.checked,
             "results_dir": resultsDir.text,
-            "language": dialog.languages[language.currentIndex]
+            "language": dialog.language
         }
     }
 
@@ -55,22 +53,28 @@ Window
             assistant.checkConnection()
     }
 
+    function test()
+    {
+        dialog.testState = "running"
+        dialog.testMessage = ""
+        assistant.testConnection(dialog.values())
+    }
+
     title: txt.set_title
     modality: Qt.WindowModal
     flags: Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
-    width: Math.round(480 * Style.scale)
-    height: Math.min(form.height + buttons.height + 4 * Style.margin, Math.round(680 * Style.scale))
-    minimumWidth: Math.round(380 * Style.scale)
-    minimumHeight: Math.round(320 * Style.scale)
-    color: Style.background
+    width: Style.px(520)
+    height: Math.min(form.height + footer.height + 2 * Style.s4, Style.px(720), Screen.height - Style.px(96))
+    minimumWidth: Style.px(380)
+    minimumHeight: Style.px(320)
+    color: Style.window
 
     Connections
     {
         target: assistant
         onTestFinished:
         {
-            dialog.testing = false
-            dialog.testOk = ok
+            dialog.testState = ok ? "ok" : "error"
             dialog.testMessage = message
         }
     }
@@ -86,207 +90,243 @@ Window
     Item
     {
         anchors.fill: parent
+        focus: true
         Keys.onEscapePressed: dialog.visible = false
 
         ScrollView
         {
+            id: scroll
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.bottom: buttons.top
-            anchors.bottomMargin: Style.margin
-            style: UM.Theme.styles.scrollview
+            anchors.bottom: footer.top
+            style: Style.scrollStyle
+            horizontalScrollBarPolicy: Qt.ScrollBarAlwaysOff
 
             Item
             {
-                width: dialog.width - Style.margin
-                height: form.height + 2 * Style.margin
+                width: scroll.viewport.width
+                height: form.height + 2 * Style.s4
 
                 Column
                 {
                     id: form
-                    x: Style.margin
-                    y: Style.margin
-                    width: parent.width - 2 * Style.margin
-                    spacing: Style.narrow
+                    x: Style.s4
+                    y: Style.s4
+                    width: parent.width - 2 * Style.s4
+                    spacing: Style.s3
 
-                    Text
+                    Column
                     {
                         width: parent.width
-                        text: txt.set_hint
-                        font: Style.font
-                        color: Style.textSecondary
-                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                    }
-
-                    Text { text: txt.set_base_url; font: Style.fontBold; color: Style.text }
-
-                    TextField
-                    {
-                        id: baseUrl
-                        property string unit: ""
-                        width: parent.width
-                        height: Style.controlHeight
-                        placeholderText: "https://api.openai.com/v1"
-                        style: UM.Theme.styles.text_field
-                    }
-
-                    Text { text: txt.set_model; font: Style.fontBold; color: Style.text }
-
-                    TextField
-                    {
-                        id: modelField
-                        property string unit: ""
-                        width: parent.width
-                        height: Style.controlHeight
-                        placeholderText: "gpt-4.1"
-                        style: UM.Theme.styles.text_field
-                    }
-
-                    Text { text: txt.set_key; font: Style.fontBold; color: Style.text }
-
-                    TextField
-                    {
-                        id: apiKey
-                        property string unit: ""
-                        width: parent.width
-                        height: Style.controlHeight
-                        echoMode: TextInput.Password
-                        placeholderText: assistant.settings.api_key_set ? "••••••••" : "sk-…"
-                        style: UM.Theme.styles.text_field
-                    }
-
-                    Text
-                    {
-                        width: parent.width
-                        text: assistant.settings.api_key_set ? txt.set_key_saved.replace("%s", assistant.settings.api_key_mask) : txt.set_key_hint
-                        font: Style.fontSmall
-                        color: Style.textSecondary
-                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                    }
-
-                    Row
-                    {
-                        spacing: Style.narrow
-
-                        AButton
-                        {
-                            text: dialog.testing ? txt.set_testing : txt.set_test
-                            iconName: "connected"
-                            enabled: !dialog.testing
-                            onClicked:
-                            {
-                                dialog.testing = true
-                                dialog.testMessage = ""
-                                assistant.testConnection(dialog.values())
-                            }
-                        }
-
-                        Spinner
-                        {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: dialog.testing
-                        }
-                    }
-
-                    Rectangle
-                    {
-                        width: parent.width
-                        visible: dialog.testMessage != ""
-                        height: visible ? testText.height + 2 * Style.narrow : 0
-                        radius: Style.radius
-                        color: dialog.testOk ? Style.primaryTint : Style.dangerTint
+                        spacing: Style.s1
 
                         Text
                         {
-                            id: testText
-                            x: Style.narrow
-                            y: Style.narrow
-                            width: parent.width - 2 * Style.narrow
-                            text: dialog.testMessage
-                            font: Style.font
+                            text: txt.set_title
+                            font: Style.headline
                             color: Style.text
+                        }
+
+                        Text
+                        {
+                            width: parent.width
+                            text: txt.set_hint + " " + txt.set_required_hint
+                            font: Style.small
+                            color: Style.textSecondary
                             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                         }
                     }
 
-                    Item { width: 1; height: Style.narrow }
-
-                    Text { text: txt.set_behavior; font: Style.fontHeading; color: Style.text }
-
-                    CheckRow { id: explain; text: txt.set_explain }
-                    CheckRow { id: autoExport; text: txt.set_auto_export }
-                    CheckRow { id: verifySsl; text: txt.set_verify_ssl }
-
-                    Text { text: txt.set_language; font: Style.fontBold; color: Style.text }
-
-                    ComboBox
+                    Card
                     {
-                        id: language
-                        width: Math.round(parent.width * 0.6)
-                        model: [txt.set_lang_auto, "Русский", "English"]
-                        style: UM.Theme.styles.combobox
+                        SectionTitle { text: txt.set_section_connection }
+
+                        Column
+                        {
+                            width: parent.width
+                            spacing: Style.s1
+
+                            Text { text: txt.set_base_url + " *"; font: Style.bodyStrong; color: Style.text }
+                            Field { id: baseUrl; width: parent.width; placeholder: "https://api.openai.com/v1"; onAccepted: dialog.save() }
+                            Text { width: parent.width; text: txt.set_base_url_hint; font: Style.small; color: Style.textSecondary; wrapMode: Text.WrapAtWordBoundaryOrAnywhere }
+                        }
+
+                        Column
+                        {
+                            width: parent.width
+                            spacing: Style.s1
+
+                            Text { text: txt.set_model + " *"; font: Style.bodyStrong; color: Style.text }
+                            Field { id: modelField; width: parent.width; placeholder: "gpt-4.1"; onAccepted: dialog.save() }
+                            Text { width: parent.width; text: txt.set_model_hint; font: Style.small; color: Style.textSecondary; wrapMode: Text.WrapAtWordBoundaryOrAnywhere }
+                        }
+
+                        Column
+                        {
+                            width: parent.width
+                            spacing: Style.s1
+
+                            Text { text: txt.set_key + " *"; font: Style.bodyStrong; color: Style.text }
+                            Field
+                            {
+                                id: apiKey
+                                width: parent.width
+                                password: true
+                                placeholder: assistant.settings.api_key_set ? "••••••••" : "sk-…"
+                                onAccepted: dialog.save()
+                            }
+                            Text
+                            {
+                                width: parent.width
+                                text: assistant.settings.api_key_set ? txt.set_key_saved.replace("%s", "••••") : txt.set_key_hint
+                                font: Style.small
+                                color: Style.textSecondary
+                                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                            }
+                        }
+
+                        Column
+                        {
+                            width: parent.width
+                            spacing: Style.s2
+
+                            AButton
+                            {
+                                id: testButton
+                                variant: "secondary"
+                                iconName: "refresh"
+                                text: dialog.testState == "running" ? txt.set_testing : txt.set_test
+                                enabled: dialog.testState != "running"
+                                onClicked: dialog.test()
+                            }
+
+                            Row
+                            {
+                                id: testStatus
+                                width: parent.width
+                                spacing: Style.s2
+
+                                Spinner
+                                {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: dialog.testState == "running"
+                                }
+
+                                Icon
+                                {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: dialog.testState == "ok" || dialog.testState == "error"
+                                    name: dialog.testState == "ok" ? "check-circle" : "alert"
+                                    color: dialog.testState == "ok" ? Style.success : Style.danger
+                                }
+
+                                Text
+                                {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width - Style.iconSize - Style.s2
+                                    text: dialog.testState == "running" ? txt.set_testing
+                                        : (dialog.testState == "idle" ? txt.set_test_idle : dialog.testMessage)
+                                    font: Style.small
+                                    color: dialog.testState == "ok" ? Style.success
+                                         : (dialog.testState == "error" ? Style.danger : Style.textSecondary)
+                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                                }
+                            }
+                        }
                     }
 
-                    Text { text: txt.set_results; font: Style.fontBold; color: Style.text }
-
-                    Item
+                    Card
                     {
-                        width: parent.width
-                        height: Style.controlHeight
+                        SectionTitle { text: txt.set_section_behavior }
+                        CheckRow { id: explain; text: txt.set_explain }
+                        CheckRow { id: autoExport; text: txt.set_auto_export }
+                        CheckRow { id: verifySsl; text: txt.set_verify_ssl }
+                    }
 
-                        TextField
+                    Card
+                    {
+                        SectionTitle { text: txt.set_section_results; hint: txt.set_results_hint }
+
+                        Item
                         {
-                            id: resultsDir
-                            property string unit: ""
-                            anchors.left: parent.left
-                            anchors.right: browse.left
-                            anchors.rightMargin: Style.narrow
+                            width: parent.width
                             height: Style.controlHeight
-                            style: UM.Theme.styles.text_field
-                        }
 
-                        AButton
-                        {
-                            id: browse
-                            anchors.right: parent.right
-                            text: txt.set_browse
-                            onClicked: folderDialog.open()
+                            Field
+                            {
+                                id: resultsDir
+                                anchors.left: parent.left
+                                anchors.right: browse.left
+                                anchors.rightMargin: Style.s2
+                                height: Style.controlHeight
+                                placeholder: "C:\\Users\\…\\AIAssistantResults"
+                            }
+
+                            AButton
+                            {
+                                id: browse
+                                anchors.right: parent.right
+                                variant: "secondary"
+                                iconName: "folder"
+                                text: txt.set_browse
+                                onClicked: folderDialog.open()
+                            }
                         }
                     }
 
-                    Text
+                    Card
                     {
-                        width: parent.width
-                        text: txt.set_results_hint
-                        font: Style.fontSmall
-                        color: Style.textSecondary
-                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                        SectionTitle { text: txt.set_section_language; hint: txt.set_language }
+
+                        Segmented
+                        {
+                            current: dialog.language
+                            options: [{"value": "auto", "label": txt.set_lang_auto},
+                                      {"value": "ru", "label": txt.lang_ru},
+                                      {"value": "en", "label": txt.lang_en}]
+                            onSelected: dialog.language = value
+                        }
                     }
                 }
             }
         }
 
-        Row
+        Rectangle
         {
-            id: buttons
-            anchors.right: parent.right
-            anchors.rightMargin: Style.margin
+            id: footer
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: Style.margin
-            spacing: Style.narrow
+            width: parent.width
+            height: Style.controlHeight + 2 * Style.s3
+            color: Style.window
 
-            AButton
+            Rectangle
             {
-                text: txt.cancel
-                onClicked: dialog.visible = false
+                width: parent.width
+                height: Style.line
+                color: Style.border
             }
 
-            AButton
+            Row
             {
-                variant: "primary"
-                text: txt.save
-                onClicked: dialog.save()
+                anchors.right: parent.right
+                anchors.rightMargin: Style.s4
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.s2
+
+                AButton
+                {
+                    variant: "ghost"
+                    text: txt.cancel
+                    onClicked: dialog.visible = false
+                }
+
+                AButton
+                {
+                    variant: "primary"
+                    text: txt.save
+                    onClicked: dialog.save()
+                }
             }
         }
     }

@@ -18,3 +18,10 @@ SettingsDialog 1.0 SettingsDialog.qml
 ConfirmDialog 1.0 ConfirmDialog.qml
 RenameDialog 1.0 RenameDialog.qml
 CheckRow 1.0 CheckRow.qml
+Icon 1.0 Icon.qml
+HoverTip 1.0 HoverTip.qml
+Pill 1.0 Pill.qml
+Field 1.0 Field.qml
+Segmented 1.0 Segmented.qml
+ContextChip 1.0 ContextChip.qml
+Disclosure 1.0 Disclosure.qml

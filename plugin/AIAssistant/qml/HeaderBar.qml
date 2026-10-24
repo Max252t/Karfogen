@@ -1,97 +1,151 @@
 import QtQuick 2.2
-import UM 1.2 as UM
 import "."
 
-Rectangle
+Item
 {
     id: header
     property var txt: assistant.strings
     signal settingsClicked()
+    signal projectsClicked()
 
-    width: parent ? parent.width : implicitWidth
-    height: Math.max(titleColumn.height, Style.controlHeight) + 2 * Style.narrow
-    color: Style.background
-
-    Column
+    readonly property string connState: assistant.connectionState
+    readonly property string tone:
     {
-        id: titleColumn
-        anchors.left: parent.left
-        anchors.leftMargin: Style.margin
-        anchors.right: connection.left
-        anchors.rightMargin: Style.margin
-        anchors.verticalCenter: parent.verticalCenter
+        if (connState == "ok")
+            return "success"
+        if (connState == "error")
+            return "danger"
+        if (connState == "not_configured")
+            return "warning"
+        if (connState == "checking")
+            return "accent"
+        return "neutral"
+    }
 
-        Text
+    height: Style.px(52)
+
+    Item
+    {
+        id: projectButton
+        anchors.left: parent.left
+        anchors.leftMargin: Style.s3
+        anchors.verticalCenter: parent.verticalCenter
+        width: Math.min(projectRow.implicitWidth + 2 * Style.s2, connection.x - Style.s3 - x)
+        height: Style.controlLarge
+        activeFocusOnTab: true
+        Keys.onSpacePressed: header.projectsClicked()
+        Keys.onReturnPressed: header.projectsClicked()
+
+        Rectangle
         {
-            width: parent.width
-            text: assistant.projectName
-            font: Style.fontHeading
-            color: Style.text
-            elide: Text.ElideRight
+            anchors.fill: parent
+            radius: Style.radius
+            color: projectMouse.pressed ? Style.surfacePressed : (projectMouse.containsMouse ? Style.surfaceHover : "transparent")
+            border.width: projectButton.activeFocus ? Style.focusWidth : 0
+            border.color: Style.focusRing
         }
 
-        Text
+        Row
         {
-            width: parent.width
-            text: txt.messages_count.replace("%d", assistant.projectMessages)
-            font: Style.fontSmall
-            color: Style.textSecondary
-            elide: Text.ElideRight
+            id: projectRow
+            x: Style.s2
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.s1
+
+            Text
+            {
+                anchors.verticalCenter: parent.verticalCenter
+                text: assistant.projectName
+                font: Style.title
+                color: Style.text
+                elide: Text.ElideRight
+                width: Math.min(implicitWidth, projectButton.width - 2 * Style.s2 - Style.iconSmall - Style.s1)
+            }
+
+            Icon
+            {
+                anchors.verticalCenter: parent.verticalCenter
+                name: "chevron-down"
+                size: Style.iconSmall
+            }
+        }
+
+        MouseArea
+        {
+            id: projectMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: header.projectsClicked()
+        }
+
+        HoverTip
+        {
+            area: projectMouse
+            text: assistant.projectName + " · " + txt.messages_count.replace("%d", assistant.projectMessages) + "\n" + txt.projects_tip
         }
     }
 
-    Rectangle
+    Item
     {
         id: connection
         anchors.right: settingsButton.left
-        anchors.rightMargin: Style.narrow
+        anchors.rightMargin: Style.s1
         anchors.verticalCenter: parent.verticalCenter
-        width: Math.min(dot.width + connectionText.implicitWidth + 3 * Style.narrow, header.width * 0.45)
-        height: Math.round(Style.controlHeight * 0.8)
-        radius: height / 2
-        color: connectionMouse.containsMouse ? Style.panel : "transparent"
-        border.width: Style.lineWidth
-        border.color: Style.hairline
+        width: connectionRow.implicitWidth + 2 * Style.s2
+        height: Style.controlHeight
+        activeFocusOnTab: true
+        Keys.onSpacePressed: header.settingsClicked()
+        Keys.onReturnPressed: header.settingsClicked()
+
+        Rectangle
+        {
+            anchors.fill: parent
+            radius: Style.radius
+            color: header.tone == "danger" ? Style.dangerSoft
+                 : (connectionMouse.containsMouse ? Style.surfaceHover : "transparent")
+            border.width: connection.activeFocus ? Style.focusWidth : 0
+            border.color: Style.focusRing
+        }
 
         Row
         {
             id: connectionRow
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.left: parent.left
-            anchors.leftMargin: Style.narrow
-            spacing: Style.narrow
+            anchors.centerIn: parent
+            spacing: Style.s2
+
+            Spinner
+            {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: header.connState == "checking"
+                size: Style.iconSmall
+            }
 
             Rectangle
             {
-                id: dot
                 anchors.verticalCenter: parent.verticalCenter
-                width: Math.round(8 * Style.scale)
+                visible: header.connState != "checking"
+                width: Style.px(8)
                 height: width
                 radius: width / 2
                 color:
                 {
-                    var state = assistant.connectionState
-                    if (state == "ok")
+                    if (header.tone == "success")
                         return Style.success
-                    if (state == "error")
+                    if (header.tone == "danger")
                         return Style.danger
-                    if (state == "not_configured")
-                        return Style.warning
-                    if (state == "checking")
-                        return Style.primary
-                    return Style.textMuted
+                    if (header.tone == "warning")
+                        return "#D18A1A"
+                    return Style.borderStrong
                 }
             }
 
             Text
             {
-                id: connectionText
                 anchors.verticalCenter: parent.verticalCenter
-                width: connection.width - 3 * Style.narrow - dot.width
-                text: assistant.connectionText
-                font: Style.fontSmall
-                color: Style.textSecondary
-                elide: Text.ElideRight
+                text: txt["conn_short_" + header.connState] || ""
+                font: header.tone == "danger" ? Style.smallStrong : Style.small
+                color: header.tone == "danger" ? Style.danger : Style.textSecondary
             }
         }
 
@@ -104,11 +158,11 @@ Rectangle
             onClicked: header.settingsClicked()
         }
 
-        UM.TooltipArea
+        HoverTip
         {
-            anchors.fill: parent
-            acceptedButtons: Qt.NoButton
-            text: assistant.connectionDetail
+            area: connectionMouse
+            text: txt.conn_tip.replace("%s", assistant.connectionText)
+                  + (assistant.connectionDetail != "" ? "\n" + assistant.connectionDetail : "")
         }
     }
 
@@ -116,18 +170,10 @@ Rectangle
     {
         id: settingsButton
         anchors.right: parent.right
-        anchors.rightMargin: Style.narrow
+        anchors.rightMargin: Style.s3
         anchors.verticalCenter: parent.verticalCenter
         iconName: "settings"
         tooltip: txt.settings
         onClicked: header.settingsClicked()
-    }
-
-    Rectangle
-    {
-        anchors.bottom: parent.bottom
-        width: parent.width
-        height: Style.lineWidth
-        color: Style.hairline
     }
 }

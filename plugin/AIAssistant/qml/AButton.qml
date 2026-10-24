@@ -1,85 +1,103 @@
 import QtQuick 2.2
-import UM 1.2 as UM
 import "."
 
-Rectangle
+Item
 {
     id: control
 
     property string text: ""
     property string iconName: ""
     property string variant: "secondary"
+    property string size: "normal"
     property string tooltip: ""
-    property bool compact: false
+    property bool iconOnly: false
     signal clicked()
 
     readonly property bool hovered: mouse.containsMouse
-    readonly property int sidePadding: compact ? Style.narrow : Style.margin
+    readonly property bool down: mouse.pressed
+    readonly property int pad: size == "small" ? Style.s2 : Style.s3
+    readonly property bool showLabel: text != "" && !iconOnly
     readonly property color foreground:
     {
+        if (!enabled)
+            return Style.textMuted
         if (variant == "primary")
-            return Style.primaryText
+            return Style.textOnAccent
         if (variant == "danger")
             return Style.danger
-        if (variant == "link" || variant == "ghost")
-            return hovered ? Style.primaryHover : Style.primary
+        if (variant == "link")
+            return hovered ? Style.accentHover : Style.accent
         return Style.text
     }
 
-    implicitHeight: compact ? Math.round(Style.controlHeight * 0.8) : Style.controlHeight
-    implicitWidth: (iconName != "" ? Style.smallIcon : 0) + (iconName != "" && text != "" ? Style.narrow : 0)
-                   + label.implicitWidth + 2 * sidePadding
-    radius: Style.radius
-    opacity: enabled ? 1.0 : 0.45
+    implicitHeight: size == "small" ? Style.controlSmall : (size == "large" ? Style.controlLarge : Style.controlHeight)
+    implicitWidth: iconOnly ? implicitHeight
+                   : (iconName != "" ? Style.iconSize + (showLabel ? Style.s2 : 0) : 0) + label.implicitWidth + 2 * pad
     activeFocusOnTab: enabled
-    color:
-    {
-        if (variant == "primary")
-            return hovered ? Style.primaryHover : Style.primary
-        if (variant == "danger")
-            return hovered ? Style.dangerTint : Style.background
-        if (variant == "ghost")
-            return hovered ? Style.primaryTint : "transparent"
-        if (variant == "link")
-            return "transparent"
-        return hovered ? Style.panel : Style.background
-    }
-    border.width: (variant == "secondary" || variant == "danger" || activeFocus) ? Style.lineWidth : 0
-    border.color: activeFocus ? Style.fieldFocus : (variant == "danger" ? Style.danger : Style.lining)
-
     Keys.onSpacePressed: control.clicked()
     Keys.onReturnPressed: control.clicked()
+    Keys.onEnterPressed: control.clicked()
+
+    Rectangle
+    {
+        id: focusRing
+        anchors.fill: parent
+        anchors.margins: -Style.focusWidth
+        radius: background.radius + Style.focusWidth
+        color: "transparent"
+        border.width: Style.focusWidth
+        border.color: Style.focusRing
+        visible: control.activeFocus
+    }
+
+    Rectangle
+    {
+        id: background
+        anchors.fill: parent
+        radius: control.variant == "link" ? Style.radiusSmall : Style.radius
+        color:
+        {
+            var v = control.variant
+            if (v == "primary")
+                return !control.enabled ? Style.surfaceAlt : (control.down ? Style.accentPressed : (control.hovered ? Style.accentHover : Style.accent))
+            if (v == "danger")
+                return control.down ? Style.dangerSoftHover : (control.hovered ? Style.dangerSoftHover : Style.dangerSoft)
+            if (v == "secondary")
+                return !control.enabled ? Style.surfaceAlt : (control.down ? Style.surfacePressed : (control.hovered ? Style.surfaceHover : Style.surfaceAlt))
+            if (v == "accent")
+                return control.down ? Style.accentSoftHover : (control.hovered ? Style.accentSoftHover : Style.accentSoft)
+            if (v == "ghost")
+                return control.down ? Style.surfacePressed : (control.hovered ? Style.surfaceHover : "transparent")
+            return "transparent"
+        }
+        Behavior on color { ColorAnimation { duration: Style.hoverMs } }
+    }
 
     Row
     {
-        id: content
         anchors.centerIn: parent
-        spacing: Style.narrow
+        spacing: Style.s2
 
-        UM.RecolorImage
+        Icon
         {
             id: icon
-            visible: control.iconName != ""
             anchors.verticalCenter: parent.verticalCenter
-            width: Style.smallIcon
-            height: Style.smallIcon
-            sourceSize.width: width
-            sourceSize.height: height
-            source: control.iconName != "" ? UM.Theme.getIcon(control.iconName) : ""
-            color: control.foreground
+            visible: control.iconName != ""
+            name: control.iconName
+            color: control.variant == "accent" ? Style.accent : control.foreground
         }
 
         Text
         {
             id: label
             anchors.verticalCenter: parent.verticalCenter
+            visible: control.showLabel
             text: control.text
-            visible: text != ""
-            font: control.variant == "primary" ? Style.fontBold : Style.font
-            color: control.foreground
+            font: control.variant == "primary" || control.variant == "accent" ? Style.bodyStrong : Style.body
+            color: control.variant == "accent" ? Style.accent : control.foreground
             elide: Text.ElideRight
-            width: Math.max(0, Math.min(implicitWidth, control.width - 2 * control.sidePadding
-                                        - (icon.visible ? Style.smallIcon + content.spacing : 0)))
+            width: Math.max(0, Math.min(implicitWidth, control.width - 2 * control.pad
+                                        - (icon.visible ? Style.iconSize + Style.s2 : 0)))
         }
     }
 
@@ -92,11 +110,9 @@ Rectangle
         onClicked: control.clicked()
     }
 
-    UM.TooltipArea
+    HoverTip
     {
-        anchors.fill: parent
-        text: control.tooltip
-        acceptedButtons: Qt.NoButton
-        visible: control.tooltip != ""
+        area: mouse
+        text: control.tooltip != "" ? control.tooltip : (control.iconOnly ? control.text : "")
     }
 }

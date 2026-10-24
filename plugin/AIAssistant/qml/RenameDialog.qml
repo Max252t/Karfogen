@@ -1,7 +1,5 @@
 import QtQuick 2.2
-import QtQuick.Controls 1.1
 import QtQuick.Window 2.2
-import UM 1.2 as UM
 import "."
 
 Window
@@ -34,13 +32,13 @@ Window
     title: txt.proj_rename_title
     modality: Qt.WindowModal
     flags: Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
-    width: Math.round(400 * Style.scale)
-    height: column.height + buttons.height + 3 * Style.margin
+    width: Style.px(420)
+    height: column.height + buttons.height + 3 * Style.s4
     minimumWidth: width
     maximumWidth: width
     minimumHeight: height
     maximumHeight: height
-    color: Style.background
+    color: Style.surface
 
     Item
     {
@@ -50,30 +48,33 @@ Window
         Column
         {
             id: column
-            x: Style.margin
-            y: Style.margin
-            width: parent.width - 2 * Style.margin
-            spacing: Style.narrow
+            x: Style.s4
+            y: Style.s4
+            width: parent.width - 2 * Style.s4
+            spacing: Style.s2
+
+            Text
+            {
+                text: txt.proj_rename_title
+                font: Style.title
+                color: Style.text
+            }
 
             Text
             {
                 text: txt.proj_name
-                font: Style.font
+                font: Style.small
                 color: Style.textSecondary
             }
 
-            TextField
+            Field
             {
                 id: field
                 width: parent.width
-                height: Style.controlHeight
                 maximumLength: 80
-                placeholderText: txt.proj_name_placeholder
-                style: UM.Theme.styles.text_field
-                property string unit: ""
-                Keys.onReturnPressed: dialog.finish(true)
-                Keys.onEnterPressed: dialog.finish(true)
-                Keys.onEscapePressed: dialog.finish(false)
+                placeholder: txt.proj_name_placeholder
+                invalid: field.text.replace(/\s/g, "") == ""
+                onAccepted: dialog.finish(true)
             }
         }
 
@@ -81,13 +82,14 @@ Window
         {
             id: buttons
             anchors.right: parent.right
-            anchors.rightMargin: Style.margin
+            anchors.rightMargin: Style.s4
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: Style.margin
-            spacing: Style.narrow
+            anchors.bottomMargin: Style.s4
+            spacing: Style.s2
 
             AButton
             {
+                variant: "ghost"
                 text: txt.cancel
                 onClicked: dialog.finish(false)
             }
