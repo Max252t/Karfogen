@@ -10,7 +10,7 @@ PLUGIN = os.path.join(ROOT, "plugin")
 LEAK_PATTERNS = [re.compile(r"sk-[A-Za-z0-9_\-]{16,}"), re.compile(r"Bearer\s+[A-Za-z0-9_\-\.]{20,}")]
 FORBIDDEN_SUFFIXES = (".log", ".pyc", ".zip")
 FORBIDDEN_NAMES = ("local_settings.json",)
-TEXT_SUFFIXES = (".py", ".js", ".json", ".html", ".css", ".md", ".sh", ".yml", ".yaml", ".txt", ".pem")
+TEXT_SUFFIXES = (".py", ".qml", ".js", ".json", ".html", ".css", ".md", ".sh", ".yml", ".yaml", ".txt", ".pem")
 
 
 def walk(base):

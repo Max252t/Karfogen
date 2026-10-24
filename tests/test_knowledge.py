@@ -6,7 +6,7 @@ import support
 from AIAssistant.agent import knowledge
 from AIAssistant.tools import geometry
 
-SAMPLES = os.path.join(os.path.expanduser("~"), "Downloads", "Примеры деталей")
+SAMPLES = os.environ.get("KARFOGEN_SAMPLE_PARTS", os.path.join(os.path.expanduser("~"), "Downloads", "Примеры деталей"))
 
 
 def sym(axisymmetric, aspect, length=50.0):
