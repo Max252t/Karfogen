@@ -151,9 +151,11 @@ class ControllerTest(unittest.TestCase):
         self.controller.tick()
         self.assertTrue(self.controller.running)
         self.assertEqual(self.controller.sliceState, "slicing")
-        self.assertIn("Слайсинг", self.controller.statusText)
+        self.assertIn("слайсинг", self.controller.statusText)
+        self.assertIn("85 %", self.controller.statusText)
         kinds = [i["kind"] for i in self.controller.messageModel.items()]
-        self.assertIn("tool", kinds)
+        self.assertEqual(kinds, ["user", "activity"])
+        self.assertAlmostEqual(self.controller.workProgress, 0.78 + 0.17 * 0.45)
         self.assertEqual(self.controller.changeModel.count, 3)
         ui_fakes.publish(self.bus, ui_fakes.FINISH)
         self.agent.running = False

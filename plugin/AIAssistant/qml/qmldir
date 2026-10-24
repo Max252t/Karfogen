@@ -25,3 +25,15 @@ Field 1.0 Field.qml
 Segmented 1.0 Segmented.qml
 ContextChip 1.0 ContextChip.qml
 Disclosure 1.0 Disclosure.qml
+ActivityCard 1.0 ActivityCard.qml
+ProgressLine 1.0 ProgressLine.qml
+StageList 1.0 StageList.qml
+TechBlock 1.0 TechBlock.qml
+ParamChanges 1.0 ParamChanges.qml
+DecisionTable 1.0 DecisionTable.qml
+MetricsRow 1.0 MetricsRow.qml
+FileList 1.0 FileList.qml
+PathText 1.0 PathText.qml
+DataTable 1.0 DataTable.qml
+RichBlocks 1.0 RichBlocks.qml
+AnswerView 1.0 AnswerView.qml

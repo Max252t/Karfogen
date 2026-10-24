@@ -12,6 +12,7 @@ DEFAULTS = {
     "max_iterations": 25,
     "explain": True,
     "auto_export": True,
+    "live_status": True,
     "language": "auto",
     "window_geometry": "",
 }
@@ -97,6 +98,7 @@ def public_settings():
         "has_key": bool(get("api_key")),
         "explain": get("explain"),
         "auto_export": get("auto_export"),
+        "live_status": get("live_status"),
         "language": get("language"),
         "language_effective": effective_language(),
         "slicer_language": slicer_language(),
@@ -107,7 +109,8 @@ def public_settings():
 
 
 def update_settings(data):
-    for key in ("base_url", "model", "results_dir", "port", "verify_ssl", "explain", "auto_export", "language"):
+    for key in ("base_url", "model", "results_dir", "port", "verify_ssl", "explain", "auto_export", "live_status",
+                "language"):
         if key in data:
             set_value(key, data[key])
     key = data.get("api_key")

@@ -14,12 +14,14 @@ from ..mcp import protocol
 from ..mcp.registry import get_registry
 from ..server import projects, uploads
 from ..server.events import get_bus
-from . import strings, view_state
+from . import live_status, strings, view_state
 
 POLL_MS = 150
 SCENE_REFRESH_S = 0.5
 SLICER_REFRESH_S = 3.0
-MESSAGE_ROLES = ("uid", "kind", "text", "title", "summary", "status", "details", "meta", "actions", "icon", "impact")
+MESSAGE_ROLES = ("uid", "kind", "text", "title", "summary", "status", "details", "meta", "actions", "icon", "impact",
+                 "phase", "progress", "percent", "indeterminate", "stageKey", "stages", "metrics", "changes",
+                 "decisions", "exports", "blocks", "collapsible", "plain", "stageCount", "serious")
 CHANGE_ROLES = ("key", "label", "old", "value")
 DECISION_ROLES = ("label", "value", "reason")
 PROJECT_ROLES = ("id", "name", "updated", "messages", "current")
@@ -82,9 +84,12 @@ class DictListModel(QAbstractListModel):
     def update(self, row, item):
         if not 0 <= row < len(self._items):
             return
+        old = self._items[row]
+        roles = [Qt.UserRole + 1 + i for i, name in enumerate(self._roles) if old.get(name) != item.get(name)]
         self._items[row] = dict(item)
-        index = self.index(row, 0)
-        self.dataChanged.emit(index, index)
+        if roles:
+            index = self.index(row, 0)
+            self.dataChanged.emit(index, index, roles)
 
     def remove(self, row):
         if not 0 <= row < len(self._items):
@@ -121,6 +126,7 @@ def next_screenshot_path(folder):
 
 class NativeChatController(QObject):
     stateChanged = pyqtSignal()
+    liveStatusChanged = pyqtSignal()
     languageChanged = pyqtSignal()
     settingsChanged = pyqtSignal()
     projectsChanged = pyqtSignal()
@@ -145,6 +151,7 @@ class NativeChatController(QObject):
             self._manager.attach(self._agent, self._bus)
         self._language = current_language()
         self._state = view_state.ChatViewState(self._language)
+        self._live = live_status.LiveStatus(self._language)
         self._revision = None
         self._last_id = 0
         self._running = False
@@ -219,6 +226,9 @@ class NativeChatController(QObject):
         if reset:
             self._revision = revision
             self._state.rebuild(events)
+            if not self._agent.is_running():
+                self._state.finish_open_turn()
+                self._state.ops = [("reset",)]
         else:
             for event in events:
                 self._state.apply(event)
@@ -234,6 +244,8 @@ class NativeChatController(QObject):
             self._running = running
             changed = True
             if not running:
+                self._state.finish_open_turn()
+                self._apply_ops(self._state.take_ops())
                 self._after_turn()
         if events:
             self._track_connection(events)
@@ -248,8 +260,19 @@ class NativeChatController(QObject):
             self._slicer_checked = now
             if self._refresh_slicer():
                 changed = True
+        self._update_live_status(now)
         if changed or events:
             self.stateChanged.emit()
+
+    def _update_live_status(self, now):
+        stage, serious, active = self._state.live_stage()
+        state = "running" if self._running and active else "idle"
+        if self._live.update(stage, state, now, bool(config.get("live_status")), serious):
+            self.liveStatusChanged.emit()
+
+    @pyqtProperty(str, notify=liveStatusChanged)
+    def liveStatus(self):
+        return self._live.text
 
     def _apply_ops(self, ops):
         if not ops:
@@ -310,6 +333,8 @@ class NativeChatController(QObject):
             return
         self._language = language
         self._state.language = language
+        self._live.language = language
+        self._live.reset()
         self._revision = None
         self._last_id = 0
         self.languageChanged.emit()
@@ -365,6 +390,36 @@ class NativeChatController(QObject):
     @pyqtProperty(int, notify=stateChanged)
     def toolCount(self):
         return self._state.tool_count
+
+    @pyqtProperty("QVariantList", notify=stateChanged)
+    def changeList(self):
+        return self.changes.items()
+
+    @pyqtProperty("QVariantList", notify=stateChanged)
+    def decisionList(self):
+        return self.decisions.items()
+
+    @pyqtProperty("QVariantList", notify=stateChanged)
+    def stageHistory(self):
+        return self._state.stage_history()
+
+    @pyqtSlot(int, str, result=str)
+    def countText(self, number, name):
+        try:
+            return strings.count(self._language, number, name)
+        except KeyError:
+            return str(number)
+
+    @pyqtProperty(float, notify=stateChanged)
+    def workProgress(self):
+        turn = self._state.turn
+        return float(turn.progress.value) if turn is not None else 0.0
+
+    @pyqtSlot(str)
+    def copyText(self, text):
+        from PyQt5.QtGui import QGuiApplication
+        QGuiApplication.clipboard().setText(text or "")
+        self._notify("success", self.t("copied"))
 
     def slice_view(self):
         own = dict(self._state.slice)
@@ -466,7 +521,7 @@ class NativeChatController(QObject):
         for key in ("base_url", "model", "results_dir", "language"):
             if key in data:
                 clean[key] = str(data[key] or "").strip()
-        for key in ("explain", "auto_export", "verify_ssl"):
+        for key in ("explain", "auto_export", "verify_ssl", "live_status"):
             if key in data:
                 clean[key] = bool(data[key])
         key = str(data.get("api_key") or "").strip()
@@ -886,7 +941,7 @@ class NativeChatController(QObject):
             self.continueWithoutImage()
         elif action == "pick_file":
             self.pickFileRequested.emit()
-        elif action == "reset":
+        elif action in ("reset", "result"):
             self.showTab.emit("result")
 
     @pyqtSlot(result=bool)
