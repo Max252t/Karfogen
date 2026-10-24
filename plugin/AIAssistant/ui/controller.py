@@ -512,6 +512,8 @@ class NativeChatController(QObject):
         slicer = config.normalize_language(data.get("slicer_language"))
         data["slicer_language_name"] = self.t("lang_" + slicer) if slicer else "%s → %s" % (
             data.get("slicer_language") or "—", self.t("lang_" + config.FALLBACK_LANGUAGE))
+        effective = config.normalize_language(data.get("language_effective")) or config.FALLBACK_LANGUAGE
+        data["language_effective_name"] = self.t("lang_" + effective)
         return data
 
     @pyqtSlot("QVariantMap", result=bool)

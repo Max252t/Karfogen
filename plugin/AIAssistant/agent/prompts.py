@@ -56,14 +56,14 @@ EXPORT_MANUAL = ("Файлы не сохраняй: пользователь с�
                  "Сохраняй только если пользователь прямо попросил.")
 
 
-def system_prompt():
+def system_prompt(language=None):
     from .. import config
-    language = config.effective_language()
+    language = language or config.effective_language()
     text = SYSTEM_PROMPT.replace("@@EXPORT@@", EXPORT_AUTO if config.get("auto_export") else EXPORT_MANUAL)
     text += EXPLAIN_NOTE if config.get("explain") else BRIEF_NOTE
     return text + "\n\n" + LANGUAGE_CONTRACTS[language]
 
 
-def turn_language_note():
+def turn_language_note(language=None):
     from .. import config
-    return TURN_LANGUAGE_NOTES[config.effective_language()]
+    return TURN_LANGUAGE_NOTES[language or config.effective_language()]

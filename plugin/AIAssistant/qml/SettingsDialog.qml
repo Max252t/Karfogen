@@ -295,7 +295,7 @@ Window
                         {
                             width: parent.width
                             text: dialog.language == "auto"
-                                  ? txt.set_lang_auto_hint.replace("%s", assistant.settings.slicer_language_name)
+                                  ? txt.set_lang_auto_hint.replace("%s", assistant.settings.language_effective_name)
                                   : txt.set_lang_fixed_hint
                             font: Style.small
                             color: Style.textSecondary

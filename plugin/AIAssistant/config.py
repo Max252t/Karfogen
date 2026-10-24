@@ -1,4 +1,5 @@
 import os
+import re
 
 PREFIX = "ai_assistant/"
 
@@ -112,6 +113,7 @@ def public_settings():
         "language": language_mode(),
         "language_effective": effective_language(),
         "slicer_language": slicer_language(),
+        "system_language": system_language(),
         "results_dir": get_results_dir(),
         "port": get("port"),
         "verify_ssl": get("verify_ssl"),
@@ -157,6 +159,14 @@ def slicer_language():
 
 
 def system_language():
+    if os.name == "nt":
+        try:
+            import ctypes
+            buffer = ctypes.create_unicode_buffer(85)
+            if ctypes.windll.kernel32.GetUserDefaultLocaleName(buffer, len(buffer)):
+                return str(buffer.value or "")
+        except Exception:
+            pass
     try:
         from PyQt5.QtCore import QLocale
         return str(QLocale.system().name() or "")
@@ -164,11 +174,27 @@ def system_language():
         return ""
 
 
-def effective_language():
+def text_language(text):
+    text = str(text or "")
+    if re.search(r"[А-Яа-яЁё]", text):
+        return "ru"
+    if re.search(r"[A-Za-z]", text):
+        return "en"
+    return None
+
+
+def effective_language(text=None):
     mode = language_mode()
     if mode != "auto":
         return mode
-    return normalize_language(slicer_language()) or normalize_language(system_language()) or FALLBACK_LANGUAGE
+    detected = text_language(text)
+    if detected:
+        return detected
+    slicer = normalize_language(slicer_language())
+    system = normalize_language(system_language())
+    if "ru" in (slicer, system):
+        return "ru"
+    return slicer or system or FALLBACK_LANGUAGE
 
 
 def _config_dir():

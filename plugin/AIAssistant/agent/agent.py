@@ -144,7 +144,8 @@ class Agent(object):
         self._thread.start()
         return True, "ok"
 
-    def _build_user_message(self, text, attachment_ids, model_name, with_images=True, forced_mode=None, extra_notes=None):
+    def _build_user_message(self, text, attachment_ids, model_name, with_images=True, forced_mode=None, extra_notes=None,
+                            language=None):
         notes = list(extra_notes or [])
         if forced_mode:
             notes.append("Режим печати зафиксирован пользователем: %s. Используй force_mode=%s в recommend_setup."
@@ -161,7 +162,7 @@ class Agent(object):
                 notes.append("Прикреплён файл: %s, путь: %s" % (item["name"], item["path"]))
         if model_name:
             notes.append("Имя результата (model_name): %s" % model_name)
-        notes.append(prompts.turn_language_note())
+        notes.append(prompts.turn_language_note(language))
         full_text = text
         if notes:
             full_text = text + "\n\n" + "\n".join(notes)
@@ -187,11 +188,12 @@ class Agent(object):
 
     def _run(self, text, attachment_ids, model_name, forced_mode=None, notes=None):
         try:
+            language = config.effective_language(text)
             has_images = any((uploads.get_item(i) or {}).get("kind") == "image" for i in attachment_ids)
             message = self._build_user_message(text, attachment_ids, model_name, forced_mode=forced_mode,
-                                               extra_notes=notes)
+                                               extra_notes=notes, language=language)
             self._history.append(message)
-            self._loop(has_images, attachment_ids, model_name, text, forced_mode, notes)
+            self._loop(has_images, attachment_ids, model_name, text, forced_mode, notes, language)
         except llm_client.LLMError as e:
             self._bus.publish("error", {"message": str(e), "code": e.code, "status": e.status})
         except Exception as e:
@@ -208,10 +210,10 @@ class Agent(object):
             with self._lock:
                 self._running = False
 
-    def _messages(self):
-        return [{"role": "system", "content": prompts.system_prompt()}] + compact_history(self._history)
+    def _messages(self, language=None):
+        return [{"role": "system", "content": prompts.system_prompt(language)}] + compact_history(self._history)
 
-    def _loop(self, has_images, attachment_ids, model_name, text, forced_mode=None, notes=None):
+    def _loop(self, has_images, attachment_ids, model_name, text, forced_mode=None, notes=None, language=None):
         tools = [t for t in self._registry.list_openai() if t["function"]["name"] not in LLM_EXCLUDED_TOOLS]
         limit = config.get("max_iterations")
         for _ in range(limit):
@@ -220,12 +222,12 @@ class Agent(object):
                 self._publish_cancelled()
                 return
             try:
-                reply = self._chat(self._messages(), turn_tools)
+                reply = self._chat(self._messages(language), turn_tools)
             except llm_client.LLMError as e:
                 if has_images and is_image_rejection(e):
                     self._history[self._first_user_index()] = \
                         self._build_user_message(text, attachment_ids, model_name, with_images=False,
-                                                 forced_mode=forced_mode, extra_notes=notes)
+                                                 forced_mode=forced_mode, extra_notes=notes, language=language)
                     has_images = False
                     self._bus.publish("assistant_message", {"text": "Модель не приняла изображения, продолжаю без них.",
                                                             "intermediate": True, "code": "images_dropped"})

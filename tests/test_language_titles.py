@@ -83,13 +83,30 @@ class LanguageChainTest(unittest.TestCase):
             config.set_value("language", "en")
             self.assertEqual(config.effective_language(), "en")
 
-    def test_auto_follows_supported_slicer_language_with_documented_fallback(self):
+    def test_auto_uses_supported_environment_languages_with_documented_fallback(self):
         config.set_value("language", "auto")
         for slicer, expected in (("ru_RU", "ru"), ("ru", "ru"), ("en_US", "en"), ("de_DE", "en"), ("", "en"),
                                  ("zh-CN", "en")):
             with mock.patch.object(config, "slicer_language", return_value=slicer), \
                     mock.patch.object(config, "system_language", return_value="en_US"):
                 self.assertEqual(config.effective_language(), expected, slicer)
+
+    def test_russian_windows_locale_wins_over_english_slicer_in_auto(self):
+        config.set_value("language", "auto")
+        with mock.patch.object(config, "slicer_language", return_value="en_US"), \
+                mock.patch.object(config, "system_language", return_value="ru_RU"):
+            self.assertEqual(config.effective_language(), "ru")
+
+    def test_auto_turn_contract_follows_russian_request(self):
+        config.set_value("language", "auto")
+        with mock.patch.object(config, "slicer_language", return_value="en_US"), \
+                mock.patch.object(config, "system_language", return_value="en_US"):
+            llm = _ScriptedLlm([{"content": "Готово."}])
+            agent = Agent(registry=_Registry(), bus=EventBus(), llm=llm)
+            run_turn(agent, "Что делать?")
+        messages = llm.requests[0]["messages"]
+        self.assertTrue(messages[0]["content"].endswith(prompts.LANGUAGE_CONTRACTS["ru"]))
+        self.assertTrue(messages[-1]["content"].endswith(prompts.TURN_LANGUAGE_NOTES["ru"]))
 
     def test_auto_uses_system_language_when_slicer_has_no_supported_language(self):
         config.set_value("language", "auto")
