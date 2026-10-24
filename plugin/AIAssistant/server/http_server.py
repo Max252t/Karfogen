@@ -1,8 +1,6 @@
-import base64
 import json
 import mimetypes
 import os
-import re
 import socketserver
 import threading
 import traceback
@@ -209,8 +207,6 @@ class Handler(BaseHTTPRequestHandler):
             if data.get("reset_settings"):
                 get_registry().call("reset_settings", {})
             self._send_json({"ok": True})
-        elif path == "/api/save_screenshot":
-            self._send_json(self._save_screenshot(data))
         else:
             raise ApiError("Не найдено", 404)
 
@@ -268,25 +264,6 @@ class Handler(BaseHTTPRequestHandler):
         if result["isError"]:
             raise ApiError(text, 409)
         return json.loads(text)
-
-    def _save_screenshot(self, data):
-        name = data.get("model_name")
-        if not name:
-            raise ApiError("Не указан model_name")
-        payload = data.get("data_base64") or ""
-        if payload.startswith("data:"):
-            payload = payload.split(",", 1)[1]
-        try:
-            image = base64.b64decode(payload)
-        except ValueError:
-            raise ApiError("Некорректное изображение")
-        folder = config.get_model_dir(name)
-        numbers = [int(m.group(1)) for m in (re.match(r"chat_(\d+)\.png$", f) for f in os.listdir(folder)) if m]
-        number = max(numbers) + 1 if numbers else 1
-        path = os.path.join(folder, "chat_%d.png" % number)
-        with open(path, "wb") as handle:
-            handle.write(image)
-        return {"ok": True, "path": path}
 
 
 class AssistantServer(object):
