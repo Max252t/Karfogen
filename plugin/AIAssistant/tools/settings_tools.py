@@ -1,3 +1,4 @@
+from .. import config
 from ..agent import knowledge
 from ..mcp.registry import get_registry, ToolError
 from .main_thread import run_on_main
@@ -29,6 +30,53 @@ def _extruder_stack(position):
     return ext
 
 
+SLICER_LOCALES = {"ru": "ru_RU"}
+_catalogs = {}
+
+
+def _catalog_names(stack):
+    try:
+        import os
+        from UM.Settings.ContainerRegistry import ContainerRegistry
+        definition = stack.getBottom()
+        suffix = ContainerRegistry.getMimeTypeForContainer(type(definition)).preferredSuffix
+        names = [os.path.basename(definition.getId() + "." + suffix)]
+        names.extend(os.path.basename(path) for path in definition.getInheritedFiles())
+        return tuple(names)
+    except Exception:
+        return ()
+
+
+def _catalogs_for(stack, language):
+    locale = SLICER_LOCALES.get(language)
+    names = _catalog_names(stack)
+    if not locale or not names:
+        return []
+    cache_key = (locale, names)
+    if cache_key not in _catalogs:
+        try:
+            from UM.i18n import i18nCatalog
+            found = [i18nCatalog(name, locale) for name in names]
+        except Exception:
+            found = []
+        _catalogs[cache_key] = [catalog for catalog in found if catalog.hasTranslationLoaded()]
+    return _catalogs[cache_key]
+
+
+def translate_label(stack, key, label):
+    if not label:
+        return label
+    for catalog in _catalogs_for(stack, config.effective_language()):
+        translated = catalog.i18nc("%s label" % key, label)
+        if translated != label:
+            return translated
+    return label
+
+
+def setting_label(stack, key):
+    return translate_label(stack, key, stack.getProperty(key, "label"))
+
+
 def _plain(value):
     if isinstance(value, (bool, int, float, str)) or value is None:
         return value
@@ -42,7 +90,7 @@ def _plain(value):
 def _setting_info(stack, key):
     return {
         "key": key,
-        "label": stack.getProperty(key, "label"),
+        "label": setting_label(stack, key),
         "type": stack.getProperty(key, "type"),
         "unit": stack.getProperty(key, "unit"),
         "value": _plain(stack.getProperty(key, "value")),
@@ -133,7 +181,7 @@ def _apply_setting(key, value, extruder):
         old = _plain(target.getProperty(key, "value"))
         target.userChanges.setProperty(key, "value", converted)
         new = _plain(target.getProperty(key, "value"))
-        changes.append({"key": key, "label": stack.getProperty(key, "label"), "scope": scope, "old": old, "new": new})
+        changes.append({"key": key, "label": setting_label(stack, key), "scope": scope, "old": old, "new": new})
     return changes
 
 
@@ -402,7 +450,7 @@ def set_settings(args):
 
 
 @registry.tool("search_settings",
-               "Find setting keys by substring of key, label or description (English). Returns up to 25 matches with current values.",
+               "Find setting keys by substring of key, English or localized label, or English description. Returns up to 25 matches with current values.",
                {"query": {"type": "string"}}, ["query"])
 def search_settings(args):
     query = args["query"].strip().lower()
@@ -417,7 +465,8 @@ def search_settings(args):
             if definition.type in ("category",):
                 continue
             hay_key = definition.key.lower()
-            hay = hay_key + " " + str(definition.label).lower()
+            localized = translate_label(stack, definition.key, definition.label)
+            hay = hay_key + " " + str(definition.label).lower() + " " + str(localized).lower()
             hay_desc = hay + " " + str(getattr(definition, "description", "")).lower()
             if all(w in hay for w in words):
                 rank = 0
@@ -429,7 +478,7 @@ def search_settings(args):
         found.sort()
         result = []
         for _, _, key in found[:25]:
-            result.append({"key": key, "label": stack.getProperty(key, "label"),
+            result.append({"key": key, "label": setting_label(stack, key),
                            "type": stack.getProperty(key, "type"),
                            "unit": stack.getProperty(key, "unit"),
                            "value": _plain(stack.getProperty(key, "value"))})
@@ -444,7 +493,7 @@ def get_changed_settings(args):
         out = []
         for scope, container_stack in [("global", stack)] + [("extruder %s" % p, e) for p, e in sorted(stack.extruders.items())]:
             for key in sorted(container_stack.userChanges.getAllKeys()):
-                out.append({"scope": scope, "key": key, "label": stack.getProperty(key, "label"),
+                out.append({"scope": scope, "key": key, "label": setting_label(stack, key),
                             "value": _plain(container_stack.userChanges.getProperty(key, "value"))})
         return {"changes": out}
     return run_on_main(work)

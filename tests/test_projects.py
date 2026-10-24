@@ -83,11 +83,10 @@ class StoreTest(unittest.TestCase):
         projects.save_project(meta["id"], [], [], "Другое")
         self.assertEqual(projects.load_project(meta["id"])["name"], "Своё")
 
-    def test_name_from_history_uses_model_file(self):
-        history = [{"role": "user", "content": "Сделай деталь\n\nПрикреплён файл: Шестерня.stl, путь: C:/x/Шестерня.stl"}]
-        self.assertEqual(projects.name_from_history(history), "Шестерня")
-        self.assertEqual(projects.name_from_history([{"role": "user", "content": "Кронштейн под нагрузку"}]),
-                         "Кронштейн под нагрузку")
+    def test_title_from_events_uses_model_file(self):
+        events = [{"type": "user_message", "data": {"text": "Сделай деталь", "files": [{"name": "Шестерня.stl"}]}},
+                  {"type": "done", "data": {}}]
+        self.assertEqual(projects.title_from_events(events), "Шестерня")
 
 
 class ManagerTest(unittest.TestCase):
@@ -189,6 +188,8 @@ class ManagerTest(unittest.TestCase):
         manager = fresh_manager()
         manager.ensure_current()
         manager.agent.history = [{"role": "user", "content": "Фигурка"}]
+        manager.bus.publish("user_message", {"text": "Фигурка"})
+        manager.bus.publish("done", {})
         manager.agent.on_finished()
         meta = manager.current()
         self.assertEqual(meta["name"], "Фигурка")

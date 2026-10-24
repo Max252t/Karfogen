@@ -15,6 +15,16 @@ OLD_TOOL_RESULT_CHARS = 400
 MAX_HISTORY_CHARS = 120000
 IMAGE_COST_CHARS = 6000
 IMAGE_ERROR_HINTS = ("image", "vision", "multimodal", "multi-modal", "изображ", "image_url", "content type")
+TITLE_TOOL_NAME = "set_project_title"
+TITLE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": TITLE_TOOL_NAME,
+        "description": "Internal: give the current project a short meaningful title (2-6 words, reply language) "
+                       "once the task is clear. Not shown to the user.",
+        "parameters": {"type": "object", "properties": {"title": {"type": "string"}}, "required": ["title"]},
+    },
+}
 
 
 def is_image_rejection(error):
@@ -85,6 +95,7 @@ class Agent(object):
         self._thread = None
         self.on_finished = None
         self.on_progress = None
+        self.title_handler = None
 
     def reset(self):
         with self._lock:
@@ -150,6 +161,7 @@ class Agent(object):
                 notes.append("Прикреплён файл: %s, путь: %s" % (item["name"], item["path"]))
         if model_name:
             notes.append("Имя результата (model_name): %s" % model_name)
+        notes.append(prompts.turn_language_note())
         full_text = text
         if notes:
             full_text = text + "\n\n" + "\n".join(notes)
@@ -203,11 +215,12 @@ class Agent(object):
         tools = [t for t in self._registry.list_openai() if t["function"]["name"] not in LLM_EXCLUDED_TOOLS]
         limit = config.get("max_iterations")
         for _ in range(limit):
+            turn_tools = tools + [TITLE_TOOL] if self._wants_title() else tools
             if self._cancel.is_set():
                 self._publish_cancelled()
                 return
             try:
-                reply = self._chat(self._messages(), tools)
+                reply = self._chat(self._messages(), turn_tools)
             except llm_client.LLMError as e:
                 if has_images and is_image_rejection(e):
                     self._history[self._first_user_index()] = \
@@ -248,6 +261,23 @@ class Agent(object):
         self._bus.publish("error", {"message": "Достигнут лимит шагов (%d). Уточните запрос или продолжите диалог." % limit,
                                     "code": "step_limit"})
 
+    def _wants_title(self):
+        handler = self.title_handler
+        try:
+            return handler is not None and bool(handler.wants_title())
+        except Exception:
+            _log("e", traceback.format_exc())
+            return False
+
+    def _propose_title(self, title):
+        handler = self.title_handler
+        try:
+            accepted = handler is not None and handler.propose_title(title)
+        except Exception:
+            _log("e", traceback.format_exc())
+            accepted = False
+        return "ok" if accepted else "ignored"
+
     def _publish_cancelled(self):
         self._bus.publish("assistant_message", {"text": "Остановлено пользователем.", "intermediate": True,
                                                 "code": "cancelled"})
@@ -270,6 +300,8 @@ class Agent(object):
         except ValueError as e:
             return {"role": "tool", "tool_call_id": call.get("id"),
                     "content": "Некорректные аргументы инструмента: %s" % e}
+        if name == TITLE_TOOL_NAME:
+            return {"role": "tool", "tool_call_id": call.get("id"), "content": self._propose_title(args.get("title"))}
         self._status("Выполняю инструмент: %s" % name)
         if not self._registry.has(name):
             return {"role": "tool", "tool_call_id": call.get("id"), "content": "Неизвестный инструмент: %s" % name}

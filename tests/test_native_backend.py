@@ -172,8 +172,9 @@ class ProjectsNativeTest(unittest.TestCase):
             self.assertTrue(prepare.called)
 
     def test_scene_model_names_project(self):
-        history = [{"role": "user", "content": "Сделай прочнее\n\nМодель уже в сцене: gear_v2.stl (object_id=obj1, габариты 1 мм)."}]
-        self.assertEqual(projects.name_from_history(history), "gear_v2")
+        events = [{"type": "user_message", "data": {"text": "Сделай прочнее", "scene": ["gear_v2.stl"]}},
+                  {"type": "done", "data": {}}]
+        self.assertEqual(projects.title_from_events(events), "Gear")
 
 
 if __name__ == "__main__":

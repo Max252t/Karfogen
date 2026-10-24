@@ -116,7 +116,7 @@ def url_to_path(value):
 
 
 def current_language():
-    return "ru" if config.effective_language() == "ru" else "en"
+    return config.effective_language()
 
 
 def next_screenshot_path(folder):
@@ -509,6 +509,9 @@ class NativeChatController(QObject):
     def settings(self):
         data = config.public_settings()
         data["api_key_mask"] = data.pop("api_key", "")
+        slicer = config.normalize_language(data.get("slicer_language"))
+        data["slicer_language_name"] = self.t("lang_" + slicer) if slicer else "%s → %s" % (
+            data.get("slicer_language") or "—", self.t("lang_" + config.FALLBACK_LANGUAGE))
         return data
 
     @pyqtSlot("QVariantMap", result=bool)
@@ -518,9 +521,11 @@ class NativeChatController(QObject):
             return False
         data = dict(data or {})
         clean = {}
-        for key in ("base_url", "model", "results_dir", "language"):
+        for key in ("base_url", "model", "results_dir"):
             if key in data:
                 clean[key] = str(data[key] or "").strip()
+        if str(data.get("language") or "") in config.LANGUAGE_MODES:
+            clean["language"] = str(data["language"])
         for key in ("explain", "auto_export", "verify_ssl", "live_status"):
             if key in data:
                 clean[key] = bool(data[key])
@@ -596,8 +601,7 @@ class NativeChatController(QObject):
 
     @pyqtProperty(str, notify=projectsChanged)
     def projectName(self):
-        meta = self._project_meta
-        return meta["name"] if meta else self.t("no_project")
+        return self._project_name(self._project_meta)
 
     @pyqtProperty(str, notify=projectsChanged)
     def projectId(self):
@@ -612,6 +616,11 @@ class NativeChatController(QObject):
     @pyqtProperty(bool, notify=projectsChanged)
     def hasProjects(self):
         return self.projectList.count > 0
+
+    def _project_name(self, meta):
+        if not meta or meta.get("default_name"):
+            return self.t("no_project")
+        return meta["name"]
 
     def _format_date(self, ts):
         fmt = "%d.%m.%Y %H:%M" if self._language == "ru" else "%Y-%m-%d %H:%M"
@@ -629,7 +638,7 @@ class NativeChatController(QObject):
             _log("e", "could not list projects: %s" % e)
             items = []
         current = self._project_meta["id"] if self._project_meta else None
-        self.projectList.setItems([{"id": p["id"], "name": p["name"], "updated": self._format_date(p["updated"]),
+        self.projectList.setItems([{"id": p["id"], "name": self._project_name(p), "updated": self._format_date(p["updated"]),
                                     "messages": int(p.get("messages", 0)), "current": p["id"] == current}
                                    for p in items])
         self.projectsChanged.emit()
@@ -1061,34 +1070,6 @@ class NativeChatController(QObject):
             return ""
         self._notify("success", self.t("toast_screenshot", path))
         return path
-
-    @pyqtProperty("QVariantMap", constant=True)
-    def windowGeometry(self):
-        parts = str(config.get("window_geometry") or "").split(",")
-        try:
-            x, y, w, h = [int(float(p)) for p in parts]
-        except ValueError:
-            return {}
-        if w < 200 or h < 200:
-            return {}
-        result = {"width": w, "height": h}
-        if self._point_visible(x + 40, y + 20):
-            result.update({"x": x, "y": y})
-        return result
-
-    def _point_visible(self, x, y):
-        try:
-            from PyQt5.QtCore import QPoint
-            from PyQt5.QtGui import QGuiApplication
-            screens = QGuiApplication.screens()
-        except Exception:
-            return False
-        return any(screen.availableGeometry().contains(QPoint(x, y)) for screen in screens)
-
-    @pyqtSlot(int, int, int, int)
-    def saveGeometry(self, x, y, width, height):
-        if width >= 200 and height >= 200:
-            config.set_value("window_geometry", "%d,%d,%d,%d" % (x, y, width, height))
 
     @pyqtSlot()
     def windowShown(self):
