@@ -314,18 +314,6 @@ class ControllerTest(unittest.TestCase):
         self.controller.saveGeometry(-50000, -50000, 700, 800)
         self.assertNotIn("x", self.controller.windowGeometry)
 
-    def test_screenshot_without_window_reports_failure(self):
-        toasts = []
-        self.controller.toast.connect(toasts.append)
-        self.assertEqual(self.controller.saveScreenshot(), "")
-        self.assertEqual(toasts, [self.controller.t("toast_screenshot_fail")])
-
-    def test_next_screenshot_path(self):
-        folder = tempfile.mkdtemp()
-        self.assertTrue(controller_module.next_screenshot_path(folder).endswith("chat_1.png"))
-        open(os.path.join(folder, "chat_4.png"), "wb").close()
-        self.assertTrue(controller_module.next_screenshot_path(folder).endswith("chat_5.png"))
-
     def test_project_switch_discards_previous_retry_and_attachments(self):
         self.controller.send("first project request")
         self.agent.running = False

@@ -213,14 +213,6 @@ Item
                             text: txt.res_open_folder
                             onClicked: assistant.openResultsFolder()
                         }
-
-                        AButton
-                        {
-                            variant: "ghost"
-                            iconName: "camera"
-                            text: txt.res_screenshot
-                            onClicked: assistant.saveScreenshot()
-                        }
                     }
 
                     Repeater

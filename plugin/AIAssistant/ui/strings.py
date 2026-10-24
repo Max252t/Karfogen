@@ -183,7 +183,6 @@ RU = {
     "res_save_gcode": "Сохранить G-code",
     "res_save_3mf": "Сохранить 3MF",
     "res_open_folder": "Открыть папку",
-    "res_screenshot": "Сохранить скриншот чата",
     "res_saved_to": "Сохранено: %s",
     "res_export_hint": "Сначала нарежьте модель — попросите ассистента или нажмите «Нарезать» в слайсере.",
     "res_reset": "Сбросить изменения настроек",
@@ -238,8 +237,6 @@ RU = {
     "set_saved": "Настройки сохранены",
 
     "toast_export": "Сохранено: %s",
-    "toast_screenshot": "Скриншот сохранён: %s",
-    "toast_screenshot_fail": "Не удалось сохранить скриншот",
     "toast_folder_fail": "Не удалось открыть папку",
     "toast_file_added": "Прикреплено: %s",
 
@@ -502,7 +499,6 @@ EN = {
     "res_save_gcode": "Save G-code",
     "res_save_3mf": "Save 3MF",
     "res_open_folder": "Open folder",
-    "res_screenshot": "Save chat screenshot",
     "res_saved_to": "Saved: %s",
     "res_export_hint": "Slice the model first — ask the assistant or press Slice in the slicer.",
     "res_reset": "Reset setting changes",
@@ -557,8 +553,6 @@ EN = {
     "set_saved": "Settings saved",
 
     "toast_export": "Saved: %s",
-    "toast_screenshot": "Screenshot saved: %s",
-    "toast_screenshot_fail": "Couldn't save the screenshot",
     "toast_folder_fail": "Couldn't open the folder",
     "toast_file_added": "Attached: %s",
 
