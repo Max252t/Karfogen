@@ -3,6 +3,7 @@ import os
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 import support
 from AIAssistant import config
@@ -87,7 +88,8 @@ class ImageHandlingTest(unittest.TestCase):
         original = uploads.MAX_RAW_IMAGE_BYTES
         uploads.MAX_RAW_IMAGE_BYTES = 10
         try:
-            self.assertIsNone(uploads.image_data_url(item))
+            with mock.patch.object(uploads, "_encode_with_qt", return_value=None):
+                self.assertIsNone(uploads.image_data_url(item))
         finally:
             uploads.MAX_RAW_IMAGE_BYTES = original
 
@@ -97,7 +99,8 @@ class ImageHandlingTest(unittest.TestCase):
         uploads.MAX_RAW_IMAGE_BYTES = 10
         try:
             agent = agent_module.Agent(registry=get_registry(), llm=object())
-            message = agent._build_user_message("hello", [item["id"]], None)
+            with mock.patch.object(uploads, "_encode_with_qt", return_value=None):
+                message = agent._build_user_message("hello", [item["id"]], None)
         finally:
             uploads.MAX_RAW_IMAGE_BYTES = original
         self.assertIsInstance(message["content"], str)

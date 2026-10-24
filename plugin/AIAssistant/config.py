@@ -13,6 +13,7 @@ DEFAULTS = {
     "explain": True,
     "auto_export": True,
     "language": "auto",
+    "window_geometry": "",
 }
 
 ENV_NAMES = {

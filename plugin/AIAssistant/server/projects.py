@@ -207,7 +207,8 @@ def name_from_history(history):
         if isinstance(content, list):
             content = " ".join(p.get("text", "") for p in content if p.get("type") == "text")
         content = content or ""
-        found = re.search(r"Прикреплён файл: ([^\n]+?), путь:", content)
+        found = re.search(r"Прикреплён файл: ([^\n]+?), путь:", content) or \
+            re.search(r"Модель уже в сцене: ([^\n]+?) \(object_id", content)
         text = content.split("\n\n")[0]
         return suggest_name(text, found.group(1) if found else None)
     return None
@@ -265,11 +266,12 @@ class ProjectManager(object):
                 self.current_id = create_project()["id"]
             return self.current_id
 
-    def create(self, name=None):
+    def create(self, name=None, prepare=True):
         self._require_idle()
         with self._lock:
             self.save_current()
-            self.prepare_slicer()
+            if prepare:
+                self.prepare_slicer()
             meta = create_project(name)
             self.current_id = meta["id"]
             self.agent.set_history([])

@@ -111,22 +111,30 @@ class Agent(object):
     def set_history(self, history):
         self._history = list(history)
 
-    def submit(self, text, attachment_ids=None, model_name=None, forced_mode=None):
+    def submit(self, text, attachment_ids=None, model_name=None, forced_mode=None, notes=None, display=None):
         with self._lock:
             if self._running:
                 return False, "Ассистент ещё обрабатывает предыдущее сообщение"
             self._running = True
             self._cancel.clear()
-        self._bus.publish("user_message", {"text": text, "attachments": list(attachment_ids or []),
-                                           "model_name": model_name})
-        self._thread = threading.Thread(target=self._run, args=(text, attachment_ids or [], model_name, forced_mode),
+        files = []
+        for item_id in attachment_ids or []:
+            item = uploads.get_item(item_id)
+            if item is not None:
+                files.append({"name": item["name"], "kind": item["kind"]})
+        data = {"text": text, "attachments": list(attachment_ids or []), "model_name": model_name,
+                "files": files, "forced_mode": forced_mode}
+        data.update(display or {})
+        self._bus.publish("user_message", data)
+        self._thread = threading.Thread(target=self._run,
+                                        args=(text, attachment_ids or [], model_name, forced_mode, list(notes or [])),
                                         name="AIAssistantAgent")
         self._thread.daemon = True
         self._thread.start()
         return True, "ok"
 
-    def _build_user_message(self, text, attachment_ids, model_name, with_images=True, forced_mode=None):
-        notes = []
+    def _build_user_message(self, text, attachment_ids, model_name, with_images=True, forced_mode=None, extra_notes=None):
+        notes = list(extra_notes or [])
         if forced_mode:
             notes.append("Режим печати зафиксирован пользователем: %s. Используй force_mode=%s в recommend_setup."
                          % (knowledge.MODE_LABELS.get(forced_mode, forced_mode), forced_mode))
@@ -165,17 +173,18 @@ class Agent(object):
         self._status("Жду ответ LLM")
         return self._llm.chat(messages, tools)
 
-    def _run(self, text, attachment_ids, model_name, forced_mode=None):
+    def _run(self, text, attachment_ids, model_name, forced_mode=None, notes=None):
         try:
             has_images = any((uploads.get_item(i) or {}).get("kind") == "image" for i in attachment_ids)
-            message = self._build_user_message(text, attachment_ids, model_name, forced_mode=forced_mode)
+            message = self._build_user_message(text, attachment_ids, model_name, forced_mode=forced_mode,
+                                               extra_notes=notes)
             self._history.append(message)
-            self._loop(has_images, attachment_ids, model_name, text, forced_mode)
+            self._loop(has_images, attachment_ids, model_name, text, forced_mode, notes)
         except llm_client.LLMError as e:
-            self._bus.publish("error", {"message": str(e)})
+            self._bus.publish("error", {"message": str(e), "code": e.code, "status": e.status})
         except Exception as e:
             _log("e", traceback.format_exc())
-            self._bus.publish("error", {"message": "Внутренняя ошибка ассистента: %s" % e})
+            self._bus.publish("error", {"message": "Внутренняя ошибка ассистента: %s" % e, "code": "internal"})
         finally:
             self._status("Готово")
             self._bus.publish("done", {})
@@ -190,12 +199,12 @@ class Agent(object):
     def _messages(self):
         return [{"role": "system", "content": prompts.system_prompt()}] + compact_history(self._history)
 
-    def _loop(self, has_images, attachment_ids, model_name, text, forced_mode=None):
+    def _loop(self, has_images, attachment_ids, model_name, text, forced_mode=None, notes=None):
         tools = [t for t in self._registry.list_openai() if t["function"]["name"] not in LLM_EXCLUDED_TOOLS]
         limit = config.get("max_iterations")
         for _ in range(limit):
             if self._cancel.is_set():
-                self._bus.publish("assistant_message", {"text": "Остановлено пользователем.", "intermediate": True})
+                self._publish_cancelled()
                 return
             try:
                 reply = self._chat(self._messages(), tools)
@@ -203,10 +212,10 @@ class Agent(object):
                 if has_images and is_image_rejection(e):
                     self._history[self._first_user_index()] = \
                         self._build_user_message(text, attachment_ids, model_name, with_images=False,
-                                                 forced_mode=forced_mode)
+                                                 forced_mode=forced_mode, extra_notes=notes)
                     has_images = False
                     self._bus.publish("assistant_message", {"text": "Модель не приняла изображения, продолжаю без них.",
-                                                            "intermediate": True})
+                                                            "intermediate": True, "code": "images_dropped"})
                     continue
                 raise
             tool_calls = reply.get("tool_calls") or []
@@ -215,6 +224,9 @@ class Agent(object):
                 entry["tool_calls"] = tool_calls
             self._history.append(entry)
             if not tool_calls:
+                if self._cancel.is_set():
+                    self._publish_cancelled()
+                    return
                 self._bus.publish("assistant_message", {"text": reply.get("content") or ""})
                 return
             if reply.get("content"):
@@ -230,7 +242,15 @@ class Agent(object):
                     self.on_progress()
                 except Exception:
                     _log("e", traceback.format_exc())
-        self._bus.publish("error", {"message": "Достигнут лимит шагов (%d). Уточните запрос или продолжите диалог." % limit})
+        if self._cancel.is_set():
+            self._publish_cancelled()
+            return
+        self._bus.publish("error", {"message": "Достигнут лимит шагов (%d). Уточните запрос или продолжите диалог." % limit,
+                                    "code": "step_limit"})
+
+    def _publish_cancelled(self):
+        self._bus.publish("assistant_message", {"text": "Остановлено пользователем.", "intermediate": True,
+                                                "code": "cancelled"})
 
     def _first_user_index(self):
         for index in range(len(self._history) - 1, -1, -1):

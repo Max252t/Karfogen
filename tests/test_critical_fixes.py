@@ -1,5 +1,6 @@
 import threading
 import unittest
+from unittest import mock
 
 import support
 from AIAssistant.agent.agent import Agent
@@ -40,6 +41,16 @@ class _Llm(object):
 
 
 class CancelTest(unittest.TestCase):
+    def test_cancel_on_last_iteration_does_not_report_step_limit(self):
+        bus = EventBus()
+        agent = Agent(registry=_Registry(), bus=bus)
+        agent._llm = _Llm(agent)
+        with mock.patch("AIAssistant.agent.agent.config.get", return_value=1):
+            agent.submit("hello")
+            agent._thread.join(5)
+        self.assertFalse(any(e["type"] == "error" for e in bus.snapshot()))
+        self.assertTrue(any(e["data"].get("code") == "cancelled" for e in bus.snapshot()))
+
     def test_cancel_when_idle_returns_false(self):
         agent = Agent(registry=_Registry(), bus=EventBus(), llm=object())
         self.assertFalse(agent.cancel())

@@ -21,16 +21,38 @@ class UploadError(Exception):
     pass
 
 
+def file_kind(name):
+    ext = os.path.splitext(name)[1].lower()
+    if ext in IMAGE_EXTENSIONS:
+        return "image"
+    if ext in MODEL_EXTENSIONS:
+        return "model"
+    raise UploadError("Неподдерживаемый тип файла. Разрешены: JPG, PNG, STL, OBJ, 3MF")
+
+
+def register_file(path):
+    if not path:
+        raise UploadError("Не указан файл")
+    path = os.path.abspath(path)
+    kind = file_kind(path)
+    if not os.path.isfile(path):
+        raise UploadError("Файл не найден")
+    size = os.path.getsize(path)
+    if size == 0:
+        raise UploadError("Файл пустой")
+    if size > MAX_BYTES:
+        raise UploadError("Файл больше 100 МБ")
+    with _lock:
+        item_id = "f" + uuid.uuid4().hex[:12]
+        item = {"id": item_id, "name": os.path.basename(path), "kind": kind, "path": path, "size": size}
+        _items[item_id] = item
+    return item
+
+
 def save_upload(name, data_base64):
     if not name:
         raise UploadError("Не указано имя файла")
-    ext = os.path.splitext(name)[1].lower()
-    if ext in IMAGE_EXTENSIONS:
-        kind = "image"
-    elif ext in MODEL_EXTENSIONS:
-        kind = "model"
-    else:
-        raise UploadError("Неподдерживаемый тип файла. Разрешены: JPG, PNG, STL, OBJ, 3MF")
+    kind = file_kind(name)
     if "," in data_base64[:100] and data_base64.startswith("data:"):
         data_base64 = data_base64.split(",", 1)[1]
     try:
