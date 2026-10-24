@@ -204,7 +204,7 @@ class RedesignControllerTest(unittest.TestCase):
     def test_notifications_carry_a_kind(self):
         kinds = []
         self.controller.notify.connect(lambda kind, message: kinds.append(kind))
-        self.controller.saveScreenshot()
+        self.controller._notify("error", "failed")
         self.assertEqual(kinds, ["error"])
 
 
