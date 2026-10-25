@@ -68,14 +68,15 @@ def recommend_setup(args):
         mode = args["force_mode"]
         mode_reasons = [knowledge.reason("mode_forced", knowledge.MODE_LABELS[mode])]
 
-    ranked = knowledge.rank_materials(tags, args.get("max_temp_c"), args.get("flexibility"))
+    flexibility = args.get("flexibility") or ("flexible" if "flexible" in tags else None)
+    ranked = knowledge.rank_materials(tags, args.get("max_temp_c"), flexibility)
     materials = _call("list_materials", {})["materials"]
     available_ids = [m["id"] for m in materials]
     prefer_enduse = bool(set(tags) & FUNCTIONAL_TAGS) and "decorative" not in tags
     material_id = None
     material_type = None
     for candidate in ranked:
-        material_id = knowledge.resolve_material_id(candidate["type"], available_ids, prefer_enduse)
+        material_id = knowledge.resolve_material_id(candidate["type"], available_ids, prefer_enduse, flexibility)
         if material_id:
             material_type = candidate
             break
@@ -83,20 +84,23 @@ def recommend_setup(args):
         raise ToolError("No suitable material is available for the current printer")
 
     profiles = _call("list_quality_profiles", {})["profiles"]
-    wanted_quality, settings, reasons = knowledge.recommend_settings(tags, mode)
+    wanted_quality, settings, reasons = knowledge.recommend_settings(tags, mode, analysis.get("mean_wall_mm"))
     quality = _pick_quality(wanted_quality, profiles) or wanted_quality
 
-    orientation_goal = "no_supports" if ("no_supports" in tags or "thin_features" in tags) else "balanced"
+    orientation_goal = ("no_supports" if set(tags) & set(["no_supports", "thin_features", "flexible"])
+                        else "balanced")
     plan = {
         "object_id": object_id,
         "mode": mode,
         "mode_label": knowledge.MODE_LABELS[mode],
         "mode_reasons": mode_reasons,
         "material": {"id": material_id, "type": material_type["type"], "score": material_type["score"],
+                     "reason": knowledge.material_reason(material_type["type"], material_id, flexibility),
                      "alternatives": [r["type"] for r in ranked[1:4]]},
         "quality_type": quality,
         "quality_reason": reasons.get("quality"),
         "settings": [{"key": k, "value": v, "reason": reasons.get(k, "")} for k, v in settings.items()],
+        "notes": [text for key, text in reasons.items() if key.startswith("note_")],
         "orientation": (knowledge.reason("orient_axis") if mode != "classic"
                         else knowledge.reason("orient_goal", orientation_goal)),
         "applied": False,
