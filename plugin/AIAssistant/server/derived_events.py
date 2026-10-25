@@ -1,3 +1,5 @@
+from ..agent import knowledge
+
 SCENE_TOOLS = set([
     "load_model", "delete_object", "clear_scene", "rotate_object", "move_object", "scale_object",
     "set_orientation", "lay_flat", "align_symmetry_axis", "arrange_all", "suggest_orientation", "recommend_setup",
@@ -50,8 +52,12 @@ def _decision_rows(plan):
     rows = [[tr("row_mode"), plan["mode_label"], "; ".join(plan.get("mode_reasons") or [])]]
     material = plan["material"]
     material_note = tr("alternatives") % ", ".join(material.get("alternatives") or [])
+    if material.get("properties"):
+        material_note = knowledge.reason("mat_profile", ", ".join(material["properties"])) + "; " + material_note
     if material.get("reason"):
         material_note = material["reason"] + "; " + material_note
+    if material.get("skipped"):
+        material_note += "; " + knowledge.reason("mat_unavailable", ", ".join(material["skipped"]))
     rows.append([tr("row_material"), "%s (%s)" % (material["id"], material["type"]), material_note])
     rows.append([tr("row_quality"), plan["quality_type"], plan.get("quality_reason") or ""])
     for item in plan.get("settings") or []:
