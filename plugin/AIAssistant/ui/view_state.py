@@ -3,6 +3,7 @@ import os
 import re
 from collections import OrderedDict
 
+from ..cad import messages as cad_messages
 from . import markdown, progress, strings
 
 MODE_LABELS = OrderedDict([("classic", "3D"), ("cylindrical", "5D Spiral"), ("cylindrical_full", "5D")])
@@ -45,6 +46,10 @@ TOOL_GROUPS = {
     "get_slice_result": "tool_slice",
     "export_gcode": "tool_export",
     "save_project_3mf": "tool_export",
+    "create_parametric_model": "tool_generate",
+    "update_parametric_model": "tool_generate",
+    "validate_generated_model": "tool_generate",
+    "export_generated_model": "tool_generate",
 }
 
 TOOL_ICONS = {
@@ -63,12 +68,14 @@ TOOL_ICONS = {
     "tool_recommend": "star",
     "tool_slice": "layers-outline",
     "tool_export": "check-outline",
+    "tool_generate": "star",
 }
 
 MUTATING_TOOLS = set([
     "load_model", "set_material", "set_setting", "set_settings", "reset_settings", "set_quality_profile",
     "set_print_mode", "select_machine", "set_orientation", "lay_flat", "align_symmetry_axis", "rotate_object",
     "move_object", "scale_object", "arrange_all", "delete_object", "clear_scene", "slice",
+    "create_parametric_model", "update_parametric_model",
 ])
 
 ERROR_ACTIONS = {
@@ -238,7 +245,54 @@ def tool_summary(language, name, result):
         return t("sum_saved", result.get("path", ""))
     if name in ("delete_object", "clear_scene"):
         return t("sum_removed", result.get("removed", ""))
+    if name in ("create_parametric_model", "update_parametric_model"):
+        return t("sum_generated", result.get("title", ""))
+    if name == "validate_generated_model":
+        return t("sum_check_ok" if result.get("ready_for_slicing") else "sum_check_fail")
+    if name == "export_generated_model":
+        return t("sum_saved", result.get("path", ""))
     return t("tool_ok")
+
+
+def _ordered_parameters(data):
+    from ..cad import schema
+    params = data.get("parameters") or {}
+    order = list((schema.PARTS.get(data.get("part_type")) or {}).get("parameters", {}).keys())
+    return sorted(params.items(), key=lambda item: order.index(item[0]) if item[0] in order else len(order))
+
+
+def generated_rows(language, data):
+    ui = cad_messages.UI.get(language, cad_messages.UI["en"])
+    rows = []
+    part = cad_messages.pick(cad_messages.PART_NAMES, data.get("part_type"), language)
+    revision = data.get("revision") or 1
+    rows.append((ui["part"], part if revision <= 1 else "%s · %s %s" % (part, ui["revision"], revision)))
+    for key, value in _ordered_parameters(data):
+        label = cad_messages.pick(cad_messages.PARAM_NAMES, key, language)
+        if isinstance(value, list):
+            value = len(value)
+        elif isinstance(value, (bool, str)) and value in cad_messages.VALUE_NAMES:
+            value = cad_messages.pick(cad_messages.VALUE_NAMES, value, language)
+        elif isinstance(value, float):
+            value = format_number(language, value)
+        rows.append((label, str(value)))
+    size = data.get("size_mm")
+    if size:
+        rows.append((ui["size"], "%s %s" % (format_dims_view(language, size), ui["mm"])))
+    validation = data.get("validation") or {}
+    status = validation.get("status")
+    check = ui["ok"] if status == "ok" else (ui["failed"] if status == "failed" else ui["unknown"])
+    errors = [cad_messages.pick(cad_messages.ERROR_TEXTS, e.get("code"), language)
+              for e in validation.get("errors") or []]
+    rows.append((ui["check"], "; ".join([check] + errors)))
+    warnings = [cad_messages.pick(cad_messages.WARNING_TEXTS, w.get("code"), language)
+                for w in (data.get("warnings") or []) + (validation.get("warnings") or [])]
+    if warnings:
+        rows.append((ui["warnings"], " ".join(warnings)))
+    assumed = [cad_messages.pick(cad_messages.PARAM_NAMES, k, language) for k in data.get("defaults_applied") or []]
+    if assumed:
+        rows.append((ui["defaults"], ", ".join(assumed)))
+    return rows
 
 
 def _empty_slice():
@@ -303,6 +357,12 @@ STAGE_GROUPS = {
     "save_project_3mf": "export",
     "delete_object": "scene",
     "clear_scene": "scene",
+    "list_generatable_parts": "context",
+    "list_generated_models": "context",
+    "create_parametric_model": "generate",
+    "update_parametric_model": "generate",
+    "validate_generated_model": "generate",
+    "export_generated_model": "generate",
 }
 
 DECISION_FIELDS = {"режим": "mode", "mode": "mode", "материал": "material", "material": "material",
@@ -360,6 +420,7 @@ class Turn(object):
         self.changes = OrderedDict()
         self.decisions = []
         self.metrics = {}
+        self.generated = None
         self.exports = OrderedDict()
         self.setup = {"mode": "", "material": "", "quality": ""}
         self.state = "running"
@@ -662,6 +723,12 @@ class ChatViewState(object):
                                      for key in ("time", "length", "weight"))
             self._refresh(self.turn)
 
+    def _on_generated_model(self, data):
+        turn = self.turn or self.last_turn
+        if turn is not None:
+            turn.generated = data
+            self._refresh(turn)
+
     def _on_decision(self, data):
         rows = []
         for row in data.get("rows") or []:
@@ -836,6 +903,9 @@ class ChatViewState(object):
         if stage["group"] == "export":
             for kind, path in turn.exports.items():
                 add(t("file_gcode") if kind == "gcode" else t("file_3mf"), path)
+        if stage["group"] == "generate" and turn.generated:
+            for label, value in generated_rows(self.language, turn.generated):
+                add(label, value)
         return facts
 
     def _details(self, stage):
