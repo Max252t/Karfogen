@@ -17,44 +17,16 @@ Window
             chatPage.composer.focusInput()
     }
 
-    function restoreGeometry()
-    {
-        var g = assistant.windowGeometry
-        if (g.width)
-        {
-            base.width = g.width
-            base.height = g.height
-            if (g.x !== undefined)
-            {
-                base.x = g.x
-                base.y = g.y
-            }
-        }
-    }
-
-    function rememberGeometry()
-    {
-        assistant.saveGeometry(base.x, base.y, base.width, base.height)
-    }
-
     title: txt.window_title + " — " + assistant.projectName
     flags: Qt.Window
     modality: Qt.NonModal
     minimumWidth: Style.px(380)
     minimumHeight: Style.px(460)
-    width: Style.px(600)
+    width: Style.px(420)
     height: Style.px(780)
     color: Style.window
 
-    Component.onCompleted: restoreGeometry()
-    onClosing: rememberGeometry()
-    onVisibleChanged:
-    {
-        if (visible)
-            assistant.windowShown()
-        else
-            rememberGeometry()
-    }
+    onVisibleChanged: if (visible) assistant.windowShown()
 
     Connections
     {

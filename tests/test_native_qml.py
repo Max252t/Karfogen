@@ -37,6 +37,14 @@ class StaticQmlTest(unittest.TestCase):
         self.assertEqual(len(problems), 4)
 
 
+def visual_items(root):
+    stack = [root]
+    while stack:
+        item = stack.pop(0)
+        yield item
+        stack.extend(item.childItems())
+
+
 @unittest.skipUnless(HAVE_QT, "PyQt5 is required to load the QML")
 class LoadQmlTest(unittest.TestCase):
     def pump(self, app, seconds=0.3):
@@ -78,7 +86,13 @@ class LoadQmlTest(unittest.TestCase):
             self.pump(app)
             self.assertEqual(window.property("currentTab"), "chat")
             self.assertGreaterEqual(window.minimumWidth(), 380)
-            self.assertGreater(controller.messageModel.count, 5)
+            self.assertEqual([i["kind"] for i in controller.messageModel.items()], ["user", "activity", "assistant", "error"])
+            for name, value in (("historyOpen", True), ("moreOpen", True), ("expanded", True),
+                                ("openStages", {"0": True, "1": True}), ("openTech", {"1": True})):
+                for item in visual_items(window.contentItem()):
+                    if item.metaObject().indexOfProperty(name) >= 0:
+                        item.setProperty(name, value)
+                self.pump(app, 0.1)
             before = controller.messageModel.items()
             window.close()
             self.pump(app)

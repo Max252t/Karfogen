@@ -11,9 +11,10 @@ Item
     property string kindText: model.kind
     readonly property int inset: Math.max(Style.s4, Math.round((width - Style.readableWidth) / 2))
     readonly property int contentWidth: Math.max(0, width - 2 * inset)
-    readonly property bool compactRow: kindText == "tool"
+    readonly property bool hidden: kindText == "activity" && model.phase == "quiet"
 
-    height: loader.y + loader.height + (compactRow ? Style.px(2) : Style.s2)
+    visible: !hidden
+    height: hidden ? 0 : loader.y + loader.height + Style.s2
 
     function actionList()
     {
@@ -31,17 +32,17 @@ Item
     {
         id: loader
         x: entry.inset
-        y: entry.compactRow ? 0 : Style.s2
+        y: Style.s2
         width: entry.contentWidth
+        active: !entry.hidden
         sourceComponent:
         {
             switch (entry.kindText)
             {
                 case "user": return userComponent
-                case "tool": return toolComponent
+                case "activity": return activityComponent
                 case "error": return errorComponent
                 case "notice": return noticeComponent
-                case "decision": return decisionComponent
                 default: return assistantComponent
             }
         }
@@ -78,27 +79,11 @@ Item
     {
         id: detailsBox
 
-        Rectangle
+        TechBlock
         {
             width: parent ? parent.width : 0
-            height: detailsText.height + 2 * Style.s3
-            radius: Style.radius
-            color: Style.surfaceAlt
-
-            TextEdit
-            {
-                id: detailsText
-                x: Style.s3
-                y: Style.s3
-                width: parent.width - 2 * Style.s3
-                text: model.details
-                readOnly: true
-                selectByMouse: true
-                wrapMode: TextEdit.WrapAnywhere
-                font: Style.mono
-                color: Style.textSecondary
-                selectionColor: Style.accent
-            }
+            text: model.details
+            label: entry.txt.tech_details
         }
     }
 
@@ -206,143 +191,39 @@ Item
     {
         id: assistantComponent
 
-        TextEdit
+        AnswerView
         {
             width: entry.contentWidth
-            text: model.text
-            textFormat: TextEdit.RichText
-            readOnly: true
-            selectByMouse: true
-            wrapMode: TextEdit.Wrap
-            font: Style.reading
-            color: model.summary == "intermediate" ? Style.textSecondary : Style.text
-            selectionColor: Style.accent
+            blocks: model.blocks
+            plain: model.plain
+            collapsible: model.collapsible
+            textColor: model.summary == "intermediate" ? Style.textSecondary : Style.text
         }
     }
 
     Component
     {
-        id: toolComponent
+        id: activityComponent
 
-        Column
+        ActivityCard
         {
             width: entry.contentWidth
-            spacing: Style.s2
-
-            Item
-            {
-                id: row
-                width: parent.width
-                height: Style.controlSmall
-                activeFocusOnTab: model.details != ""
-                Keys.onSpacePressed: entry.expanded = !entry.expanded
-                Keys.onReturnPressed: entry.expanded = !entry.expanded
-
-                Rectangle
-                {
-                    anchors.fill: parent
-                    anchors.leftMargin: -Style.s2
-                    anchors.rightMargin: -Style.s2
-                    radius: Style.radius
-                    color: rowMouse.containsMouse || entry.expanded ? Style.surfaceAlt : "transparent"
-                    border.width: row.activeFocus ? Style.focusWidth : 0
-                    border.color: Style.focusRing
-                }
-
-                Spinner
-                {
-                    id: spinner
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: model.status == "running"
-                }
-
-                Icon
-                {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: model.status != "running"
-                    name: model.status == "error" ? "alert" : "check"
-                    color: model.status == "error" ? Style.danger : Style.success
-                }
-
-                Text
-                {
-                    id: titleText
-                    anchors.left: spinner.right
-                    anchors.leftMargin: Style.s2
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Math.min(implicitWidth, row.width * 0.55)
-                    text: model.title + (model.status == "running" ? "…" : "")
-                    font: model.status == "ok" ? Style.body : Style.bodyStrong
-                    color: model.status == "error" ? Style.danger : (model.status == "running" ? Style.text : Style.textSecondary)
-                    elide: Text.ElideRight
-                }
-
-                Text
-                {
-                    anchors.left: titleText.right
-                    anchors.leftMargin: Style.s2
-                    anchors.right: chevron.left
-                    anchors.rightMargin: Style.s2
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: model.summary
-                    font: Style.small
-                    color: model.status == "error" ? Style.danger : Style.textMuted
-                    elide: Text.ElideRight
-                }
-
-                Icon
-                {
-                    id: chevron
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: model.details != "" && (rowMouse.containsMouse || entry.expanded || row.activeFocus)
-                    name: entry.expanded ? "chevron-down" : "chevron-right"
-                    size: Style.iconSmall
-                }
-
-                MouseArea
-                {
-                    id: rowMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: model.details != "" ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: if (model.details != "") entry.expanded = !entry.expanded
-                }
-
-                HoverTip
-                {
-                    area: rowMouse
-                    text: model.details != "" ? (entry.expanded ? entry.txt.hide_details : entry.txt.details) : ""
-                }
-            }
-
-            Text
-            {
-                x: Style.iconSize + Style.s2
-                width: parent.width - x
-                visible: model.status == "error" && model.impact != ""
-                text: model.impact
-                font: Style.small
-                color: Style.textSecondary
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-            }
-
-            Loader
-            {
-                x: Style.iconSize + Style.s2
-                width: parent.width - x
-                sourceComponent: actionRow
-                active: entry.actionsText != ""
-                visible: active
-            }
-
-            Loader
-            {
-                width: parent.width
-                sourceComponent: detailsBox
-                active: entry.expanded
-                visible: active
-            }
+            phase: model.phase
+            title: model.title
+            progress: model.progress
+            percent: model.percent
+            indeterminate: model.indeterminate
+            stages: model.stages
+            stageCount: model.stageCount
+            summary: model.summary
+            metrics: model.metrics
+            changes: model.changes
+            decisions: model.decisions
+            exports: model.exports
+            impact: model.impact
+            actions: model.actions
+            serious: model.serious
+            liveText: active ? assistant.liveStatus : ""
         }
     }
 
@@ -477,63 +358,6 @@ Item
                 sourceComponent: actionRow
                 active: entry.actionsText != ""
                 visible: active
-            }
-        }
-    }
-
-    Component
-    {
-        id: decisionComponent
-
-        Rectangle
-        {
-            width: entry.contentWidth
-            height: decisionColumn.height + 2 * Style.s4
-            radius: Style.radiusLarge
-            color: Style.surface
-            border.width: Style.line
-            border.color: Style.border
-
-            Column
-            {
-                id: decisionColumn
-                x: Style.s4
-                y: Style.s4
-                width: parent.width - 2 * Style.s4
-                spacing: Style.s2
-
-                Row
-                {
-                    spacing: Style.s2
-
-                    Icon
-                    {
-                        anchors.verticalCenter: parent.verticalCenter
-                        name: "sparkle"
-                        color: Style.accent
-                    }
-
-                    Text
-                    {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: model.title
-                        font: Style.bodyStrong
-                        color: Style.text
-                    }
-                }
-
-                TextEdit
-                {
-                    width: parent.width
-                    text: model.text
-                    textFormat: TextEdit.RichText
-                    readOnly: true
-                    selectByMouse: true
-                    font: Style.body
-                    color: Style.text
-                    wrapMode: TextEdit.Wrap
-                    selectionColor: Style.accent
-                }
             }
         }
     }

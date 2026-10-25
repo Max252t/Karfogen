@@ -20,6 +20,7 @@ Window
         apiKey.text = ""
         explain.checked = s.explain !== false
         autoExport.checked = s.auto_export !== false
+        liveStatus.checked = s.live_status !== false
         verifySsl.checked = s.verify_ssl !== false
         resultsDir.text = s.results_dir || ""
         dialog.language = s.language || "auto"
@@ -38,6 +39,7 @@ Window
             "api_key": apiKey.text,
             "explain": explain.checked,
             "auto_export": autoExport.checked,
+            "live_status": liveStatus.checked,
             "verify_ssl": verifySsl.checked,
             "results_dir": resultsDir.text,
             "language": dialog.language
@@ -241,6 +243,7 @@ Window
                         SectionTitle { text: txt.set_section_behavior }
                         CheckRow { id: explain; text: txt.set_explain }
                         CheckRow { id: autoExport; text: txt.set_auto_export }
+                        CheckRow { id: liveStatus; text: txt.set_live_status; secondary: txt.set_live_status_hint }
                         CheckRow { id: verifySsl; text: txt.set_verify_ssl }
                     }
 
@@ -286,6 +289,17 @@ Window
                                       {"value": "ru", "label": txt.lang_ru},
                                       {"value": "en", "label": txt.lang_en}]
                             onSelected: dialog.language = value
+                        }
+
+                        Text
+                        {
+                            width: parent.width
+                            text: dialog.language == "auto"
+                                  ? txt.set_lang_auto_hint.replace("%s", assistant.settings.language_effective_name)
+                                  : txt.set_lang_fixed_hint
+                            font: Style.small
+                            color: Style.textSecondary
+                            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                         }
                     }
                 }

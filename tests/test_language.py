@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import support
 from AIAssistant import config
@@ -15,17 +16,39 @@ class LanguageTest(unittest.TestCase):
         config.set_value("language", "en")
         self.assertEqual(config.effective_language(), "en")
 
-    def test_auto_without_slicer_falls_back_to_english(self):
+    def test_auto_without_slicer_uses_the_system_language(self):
         config.set_value("language", "auto")
-        self.assertEqual(config.effective_language(), "en")
+        with mock.patch.object(config, "slicer_language", return_value=""), \
+                mock.patch.object(config, "system_language", return_value="ru_RU"):
+            self.assertEqual(config.effective_language(), "ru")
+
+    def test_auto_prefers_russian_system_locale_over_english_slicer(self):
+        config.set_value("language", "auto")
+        with mock.patch.object(config, "slicer_language", return_value="en_US"), \
+                mock.patch.object(config, "system_language", return_value="ru_RU"):
+            self.assertEqual(config.effective_language(), "ru")
+
+    def test_auto_follows_the_current_message_language(self):
+        config.set_value("language", "auto")
+        with mock.patch.object(config, "slicer_language", return_value="en_US"), \
+                mock.patch.object(config, "system_language", return_value="en_US"):
+            self.assertEqual(config.effective_language("Что делать?"), "ru")
+            self.assertEqual(config.effective_language("What should I print?"), "en")
+
+    def test_explicit_language_ignores_the_message_language(self):
+        config.set_value("language", "ru")
+        self.assertEqual(config.effective_language("What should I print?"), "ru")
 
     def test_prompt_follows_language(self):
         config.set_value("language", "ru")
-        self.assertIn("русском", prompts.system_prompt())
+        self.assertTrue(prompts.system_prompt().endswith(prompts.LANGUAGE_CONTRACTS["ru"]))
         config.set_value("language", "en")
-        self.assertIn("английском", prompts.system_prompt())
+        self.assertTrue(prompts.system_prompt().endswith(prompts.LANGUAGE_CONTRACTS["en"]))
         config.set_value("language", "de")
-        self.assertIn("'de'", prompts.system_prompt())
+        self.assertEqual(config.language_mode(), "auto")
+        with mock.patch.object(config, "slicer_language", return_value=""), \
+                mock.patch.object(config, "system_language", return_value="en_US"):
+            self.assertTrue(prompts.system_prompt().endswith(prompts.LANGUAGE_CONTRACTS["en"]))
 
     def test_manual_export_changes_prompt(self):
         config.set_value("auto_export", False)
@@ -37,7 +60,7 @@ class LanguageTest(unittest.TestCase):
 
     def test_public_settings_expose_new_fields(self):
         data = config.public_settings()
-        for key in ("auto_export", "language", "language_effective", "slicer_language", "results_dir"):
+        for key in ("auto_export", "language", "language_effective", "slicer_language", "system_language", "results_dir"):
             self.assertIn(key, data)
 
 

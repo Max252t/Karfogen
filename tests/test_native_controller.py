@@ -151,9 +151,11 @@ class ControllerTest(unittest.TestCase):
         self.controller.tick()
         self.assertTrue(self.controller.running)
         self.assertEqual(self.controller.sliceState, "slicing")
-        self.assertIn("Слайсинг", self.controller.statusText)
+        self.assertIn("слайсинг", self.controller.statusText)
+        self.assertIn("85 %", self.controller.statusText)
         kinds = [i["kind"] for i in self.controller.messageModel.items()]
-        self.assertIn("tool", kinds)
+        self.assertEqual(kinds, ["user", "activity"])
+        self.assertAlmostEqual(self.controller.workProgress, 0.78 + 0.17 * 0.45)
         self.assertEqual(self.controller.changeModel.count, 3)
         ui_fakes.publish(self.bus, ui_fakes.FINISH)
         self.agent.running = False
@@ -200,6 +202,9 @@ class ControllerTest(unittest.TestCase):
 
     def test_projects_lifecycle(self):
         self.controller.send("Первая деталь")
+        self.assertEqual(self.controller.projectName, "Новый проект")
+        ui_fakes.publish(self.bus, [("user_message", {"text": "Первая деталь"}), ("done", {})])
+        self.manager.save_current()
         self.agent.running = False
         self.controller.tick()
         first = self.controller.projectId
@@ -306,13 +311,9 @@ class ControllerTest(unittest.TestCase):
         self.assertTrue(self.controller.resetChanges())
         self.assertTrue(self.pump(lambda: self.controller.changeModel.count == 0))
 
-    def test_window_geometry_roundtrip(self):
-        self.assertEqual(self.controller.windowGeometry, {})
-        self.controller.saveGeometry(50, 60, 700, 800)
-        geometry = self.controller.windowGeometry
-        self.assertEqual((geometry["width"], geometry["height"]), (700, 800))
-        self.controller.saveGeometry(-50000, -50000, 700, 800)
-        self.assertNotIn("x", self.controller.windowGeometry)
+    def test_window_geometry_is_not_owned_by_the_controller(self):
+        self.assertFalse(hasattr(self.controller, "windowGeometry"))
+        self.assertFalse(hasattr(self.controller, "saveGeometry"))
 
     def test_project_switch_discards_previous_retry_and_attachments(self):
         self.controller.send("first project request")

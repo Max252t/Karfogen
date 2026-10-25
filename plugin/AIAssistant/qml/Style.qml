@@ -85,6 +85,18 @@ QtObject
     readonly property font mono: Qt.font({"family": "Consolas", "pixelSize": sizeSmall})
 
     readonly property int hoverMs: 90
+    readonly property bool motion: true
+    readonly property int progressMs: motion ? 320 : 0
+    readonly property int revealMs: motion ? 140 : 0
+    readonly property color codeBackground: "#F2F4F6"
+    readonly property int collapsedAnswer: px(168)
+    readonly property int techMaxHeight: px(220)
+    readonly property int narrowWidth: px(420)
+
+    function ms(value)
+    {
+        return motion ? value : 0
+    }
 
     property Component scrollStyle: Component
     {

@@ -1,4 +1,5 @@
 import os
+import re
 
 PREFIX = "ai_assistant/"
 
@@ -12,8 +13,10 @@ DEFAULTS = {
     "max_iterations": 25,
     "explain": True,
     "auto_export": True,
+    "live_status": True,
     "language": "auto",
     "window_geometry": "",
+    "panel_share": "",
 }
 
 ENV_NAMES = {
@@ -80,6 +83,15 @@ def set_value(key, value):
         _memory[key] = value
 
 
+def persist():
+    try:
+        from UM.Application import Application
+        Application.getInstance().savePreferences()
+    except Exception:
+        return False
+    return True
+
+
 def mask_key(key):
     if not key:
         return ""
@@ -97,9 +109,11 @@ def public_settings():
         "has_key": bool(get("api_key")),
         "explain": get("explain"),
         "auto_export": get("auto_export"),
-        "language": get("language"),
+        "live_status": get("live_status"),
+        "language": language_mode(),
         "language_effective": effective_language(),
         "slicer_language": slicer_language(),
+        "system_language": system_language(),
         "results_dir": get_results_dir(),
         "port": get("port"),
         "verify_ssl": get("verify_ssl"),
@@ -107,16 +121,32 @@ def public_settings():
 
 
 def update_settings(data):
-    for key in ("base_url", "model", "results_dir", "port", "verify_ssl", "explain", "auto_export", "language"):
+    for key in ("base_url", "model", "results_dir", "port", "verify_ssl", "explain", "auto_export", "live_status",
+                "language"):
         if key in data:
+            if key == "language" and str(data[key] or "").strip().lower() not in LANGUAGE_MODES:
+                continue
             set_value(key, data[key])
     key = data.get("api_key")
     if key and "..." not in key and not set(key) == {"*"}:
         set_value("api_key", key.strip())
+    persist()
     return public_settings()
 
 
 SUPPORTED_LANGUAGES = ("ru", "en")
+LANGUAGE_MODES = ("auto",) + SUPPORTED_LANGUAGES
+FALLBACK_LANGUAGE = "en"
+
+
+def normalize_language(code):
+    code = str(code or "").strip().replace("-", "_").split("_")[0].lower()
+    return code if code in SUPPORTED_LANGUAGES else None
+
+
+def language_mode():
+    mode = str(get("language") or "").strip().lower()
+    return mode if mode in LANGUAGE_MODES else "auto"
 
 
 def slicer_language():
@@ -128,11 +158,43 @@ def slicer_language():
     return str(value or "").split("_")[0].lower()
 
 
-def effective_language():
-    chosen = get("language")
-    if chosen and chosen != "auto":
-        return chosen
-    return slicer_language() or "en"
+def system_language():
+    if os.name == "nt":
+        try:
+            import ctypes
+            buffer = ctypes.create_unicode_buffer(85)
+            if ctypes.windll.kernel32.GetUserDefaultLocaleName(buffer, len(buffer)):
+                return str(buffer.value or "")
+        except Exception:
+            pass
+    try:
+        from PyQt5.QtCore import QLocale
+        return str(QLocale.system().name() or "")
+    except Exception:
+        return ""
+
+
+def text_language(text):
+    text = str(text or "")
+    if re.search(r"[А-Яа-яЁё]", text):
+        return "ru"
+    if re.search(r"[A-Za-z]", text):
+        return "en"
+    return None
+
+
+def effective_language(text=None):
+    mode = language_mode()
+    if mode != "auto":
+        return mode
+    detected = text_language(text)
+    if detected:
+        return detected
+    slicer = normalize_language(slicer_language())
+    system = normalize_language(system_language())
+    if "ru" in (slicer, system):
+        return "ru"
+    return slicer or system or FALLBACK_LANGUAGE
 
 
 def _config_dir():

@@ -158,3 +158,23 @@ LONG_ANSWER_EN = (
     "Print time 2 h 14 min, 14.6 m of material (46 g). For smoother teeth ask me to switch to the high "
     "profile — the time grows to about 3 h 40 min."
 )
+
+
+MORE_SETTINGS = [
+    ("tool_call", {"call_id": "c5b", "name": "set_settings",
+                   "arguments": {"changes": [{"key": "support_enable", "value": False},
+                                             {"key": "layer_height", "value": 0.15}]}}),
+    ("tool_result", {"call_id": "c5b", "name": "set_settings", "ok": True,
+                     "result": {"applied": [{"key": "support_enable"}, {"key": "layer_height"}]}}),
+    ("setting_changed", {"key": "support_enable", "label": "Генерация поддержек", "old": "True", "value": "False"}),
+    ("setting_changed", {"key": "layer_height", "label": "Высота слоя", "old": "0.2 мм", "value": "0.15 мм"}),
+    ("setting_changed", {"key": "top_layers", "label": "Слоёв крышки", "old": 4, "value": 6}),
+    ("setting_changed", {"key": "speed_print", "label": "Скорость печати", "old": "60 мм/с", "value": "50 мм/с"}),
+]
+
+TABLE_ANSWER = (
+    "Готово, параметры подобраны.\n\n"
+    "| Параметр | Было | Стало |\n| --- | --- | --- |\n"
+    "| Стенки | 2 | 4 |\n| Заполнение | 20 % | 40 % |\n| Поддержки | вкл. | выкл. |\n\n"
+    "```json\n{\"wall_line_count\": 4, \"infill_sparse_density\": 40}\n```"
+)
