@@ -49,6 +49,10 @@ TOOL_STAGES = {
     "get_slice_result": "slicing",
     "export_gcode": "export",
     "save_project_3mf": "export",
+    "create_parametric_model": "scene",
+    "update_parametric_model": "scene",
+    "validate_generated_model": "scene",
+    "export_generated_model": "scene",
 }
 
 STEP_SHARE = 0.45
