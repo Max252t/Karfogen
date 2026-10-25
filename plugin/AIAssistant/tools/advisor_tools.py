@@ -99,6 +99,7 @@ def recommend_setup(args):
         "material": {"id": material_id, "type": material_type["type"], "score": material_type["score"],
                      "reason": knowledge.material_reason(material_type["type"], material_id, flexibility),
                      "properties": knowledge.material_profile(material_type["type"], tags),
+                     "limitations": knowledge.material_limitations(material_type["type"], tags),
                      "skipped": skipped,
                      "alternatives": [r["type"] for r in ranked[1:4]]},
         "quality_type": quality,

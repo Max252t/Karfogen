@@ -176,3 +176,59 @@ class MaterialSubstitutionTest(unittest.TestCase):
         note = derived_events._decision_rows(plan)[1][2]
         self.assertIn("110", note)
         self.assertIn("CPE_PLUS", note)
+
+
+class LimitationsAndRotatingLoadTest(unittest.TestCase):
+    def setUp(self):
+        config.set_value("language", "ru")
+
+    def tearDown(self):
+        config.set_value("language", "auto")
+
+    def test_weak_properties_are_reported_with_advice(self):
+        notes = knowledge.material_limitations("PC", ["uv", "humidity", "load_bearing"])
+        self.assertEqual(len(notes), 2)
+        self.assertTrue(any("УФ" in n and "лак" in n for n in notes))
+        self.assertTrue(any("аммиак" in n for n in notes))
+
+    def test_requirements_that_are_met_produce_no_notes(self):
+        self.assertEqual(knowledge.material_limitations("PETG", ["humidity", "chemical"]), [])
+        self.assertEqual(knowledge.material_limitations("PC", ["precision"]), [])
+
+    def test_only_requested_properties_are_checked(self):
+        self.assertEqual(knowledge.material_limitations("PA", ["uv"]), [])
+        self.assertEqual(len(knowledge.material_limitations("PA", ["humidity"])), 1)
+
+    def test_limitation_texts_exist_in_both_languages(self):
+        for _, (_, key) in knowledge.LIMITATION_PROPS.items():
+            self.assertIn(key, knowledge.REASONS["ru"])
+            self.assertIn(key, knowledge.REASONS["en"])
+
+    def test_rotating_load_gets_six_walls_and_sixty_percent(self):
+        for extra in ("rotating", "impact"):
+            _, settings, reasons = knowledge.recommend_settings(["load_bearing", extra], "classic", 8.0)
+            self.assertEqual(settings["wall_line_count"], 6)
+            self.assertEqual(settings["infill_sparse_density"], 60)
+            self.assertIn("6", reasons["wall_line_count"])
+
+    def test_plain_load_keeps_four_walls(self):
+        _, settings, _ = knowledge.recommend_settings(["load_bearing", "precision"], "classic", 8.0)
+        self.assertEqual(settings["wall_line_count"], 4)
+        self.assertEqual(settings["infill_sparse_density"], 40)
+
+    def test_limitations_reach_the_decision_table(self):
+        plan = {"mode_label": "3D", "mode_reasons": ["x"], "quality_type": "normal", "quality_reason": "q",
+                "material": {"id": "enduse_pc", "type": "PC", "reason": "", "alternatives": [],
+                             "properties": [], "skipped": [], "limitations": ["УФ ограничена"]},
+                "settings": [], "orientation": "o", "notes": ["заполнение не влияет"]}
+        rows = derived_events._decision_rows(plan)
+        self.assertEqual([r[2] for r in rows[-2:]], ["УФ ограничена", "заполнение не влияет"])
+
+    def test_pc_is_still_the_best_available_material_for_the_gear(self):
+        tags = ["load_bearing", "precision", "rotating", "humidity", "uv", "stiff"]
+        chosen = None
+        for candidate in knowledge.rank_materials(tags, 90):
+            chosen = knowledge.resolve_material_id(candidate["type"], PRINTER_MATERIALS, True)
+            if chosen:
+                break
+        self.assertEqual(chosen, "enduse_pc")

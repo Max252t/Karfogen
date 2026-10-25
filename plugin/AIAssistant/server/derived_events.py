@@ -63,7 +63,7 @@ def _decision_rows(plan):
     for item in plan.get("settings") or []:
         rows.append([item["key"], str(format_value(item["key"], item["value"])), item.get("reason") or ""])
     rows.append([tr("row_orientation"), plan.get("orientation") or "", ""])
-    for note in plan.get("notes") or []:
+    for note in (material.get("limitations") or []) + (plan.get("notes") or []):
         rows.append([tr("row_note"), "", note])
     return rows
 
