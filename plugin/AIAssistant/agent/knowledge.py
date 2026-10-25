@@ -35,7 +35,7 @@ MATERIAL_TYPES = OrderedDict([
     ("CPE", dict(heat=70, stiff=3, flex=2, uv=3, chem=4, moist=4, wear=3, impact=3, ease=4, light=3, food=4, esd=1, detail=4)),
     ("CPE_PLUS", dict(heat=100, stiff=4, flex=1, uv=3, chem=4, moist=4, wear=3, impact=3, ease=3, light=3, food=3, esd=1, detail=3)),
     ("ABS", dict(heat=85, stiff=3, flex=2, uv=2, chem=3, moist=4, wear=3, impact=3, ease=2, light=5, food=1, esd=1, detail=3)),
-    ("PC", dict(heat=110, stiff=4, flex=1, uv=2, chem=2, moist=3, wear=3, impact=5, ease=1, light=3, food=2, esd=1, detail=3)),
+    ("PC", dict(heat=110, stiff=4, flex=1, uv=2, chem=2, moist=2, wear=3, impact=5, ease=1, light=3, food=2, esd=1, detail=3)),
     ("PA", dict(heat=85, stiff=3, flex=2, uv=3, chem=4, moist=1, wear=5, impact=5, ease=2, light=4, food=3, esd=2, detail=3)),
     ("PP", dict(heat=100, stiff=2, flex=3, uv=2, chem=5, moist=5, wear=3, impact=4, ease=1, light=5, food=5, esd=1, detail=2)),
     ("SBS", dict(heat=70, stiff=2, flex=3, uv=3, chem=3, moist=4, wear=3, impact=4, ease=3, light=3, food=2, esd=1, detail=3)),
@@ -91,6 +91,17 @@ TAG_WEIGHTS = {
     "thin_features": {"impact": 2.0, "ease": 0.5},
 }
 
+LIMITATION_PROPS = OrderedDict([
+    ("uv", ("uv", "lim_uv")),
+    ("humidity", ("moist", "lim_moist")),
+    ("chemical", ("chem", "lim_chem")),
+    ("wear", ("wear", "lim_wear")),
+    ("impact", ("impact", "lim_impact")),
+    ("food_safe", ("food", "lim_food")),
+])
+
+LIMITATION_THRESHOLD = 2
+
 PROPERTY_LABELS = {
     "ru": {"heat": "теплостойкость %d °C", "stiff": "жёсткость %d/5", "flex": "эластичность %d/5", "uv": "стойкость к УФ %d/5",
            "chem": "химстойкость %d/5", "moist": "стойкость к влаге %d/5", "wear": "износостойкость %d/5",
@@ -131,6 +142,14 @@ REASONS = {
         "q_precision": "точность/внешний вид: тонкий слой (%.2f мм)",
         "q_decor": "декор: слой 0.1, слои почти не видны",
         "q_default": "стандартное функциональное качество: слой 0.15",
+        "walls_rotating_load": "нагрузка на вращающуюся деталь: 6 периметров, зубья, ступицы и посадочные места становятся почти сплошными",
+        "infill_rotating_load": "нагрузка на вращающуюся деталь: заполнение 60%",
+        "lim_uv": "стойкость к УФ ограничена (%d/5): защитите деталь покраской или УФ-лаком",
+        "lim_moist": "стойкость к влаге ограничена (%d/5): при длительном нагреве и высокой влажности возможна потеря вязкости, избегайте щелочей и аммиака",
+        "lim_chem": "химстойкость ограничена (%d/5): проверьте совместимость материала со средой",
+        "lim_wear": "износостойкость ограничена (%d/5): возможен ускоренный износ",
+        "lim_impact": "ударная вязкость ограничена (%d/5): возможно хрупкое разрушение при ударе",
+        "lim_food": "безопасность для контакта с пищей ограничена (%d/5): проверьте допуск материала",
         "walls_load": "нагрузка: 4 периметра",
         "infill_load": "нагрузка: заполнение 40%",
         "pattern_load": "нагрузка: изотропный gyroid",
@@ -167,6 +186,14 @@ REASONS = {
         "q_precision": "precision/appearance: fine layer (%.2f mm)",
         "q_decor": "decorative: 0.1 layer, layers barely visible",
         "q_default": "standard functional quality: 0.15 layer",
+        "walls_rotating_load": "load on a rotating part: 6 perimeters, teeth, hubs and mating seats become almost solid",
+        "infill_rotating_load": "load on a rotating part: 60% infill",
+        "lim_uv": "UV resistance is limited (%d/5): protect the part with paint or UV varnish",
+        "lim_moist": "moisture resistance is limited (%d/5): prolonged heat and high humidity may reduce toughness, avoid alkalis and ammonia",
+        "lim_chem": "chemical resistance is limited (%d/5): check compatibility with the environment",
+        "lim_wear": "wear resistance is limited (%d/5): accelerated wear is possible",
+        "lim_impact": "impact toughness is limited (%d/5): brittle failure on impact is possible",
+        "lim_food": "food contact safety is limited (%d/5): check the material approval",
         "walls_load": "load: 4 perimeters",
         "infill_load": "load: 40% infill",
         "pattern_load": "load: isotropic gyroid",
@@ -279,6 +306,17 @@ def material_reason(material_type, material_id, flexibility):
     return ""
 
 
+def material_limitations(material_type, tags):
+    props = MATERIAL_TYPES.get(material_type)
+    if not props:
+        return []
+    result = []
+    for tag, (prop, key) in LIMITATION_PROPS.items():
+        if tag in (tags or []) and props[prop] <= LIMITATION_THRESHOLD:
+            result.append(reason(key, props[prop]))
+    return result
+
+
 def material_profile(material_type, tags):
     from .. import config
     props = MATERIAL_TYPES.get(material_type)
@@ -355,6 +393,10 @@ def recommend_settings(tags, mode, mean_wall_mm=None):
         reasons["wall_line_count"] = reason("walls_load")
         reasons["infill_sparse_density"] = reason("infill_load")
         reasons["infill_pattern"] = reason("pattern_load")
+        if "load_bearing" in tags and tags & {"rotating", "impact"}:
+            walls, infill = 6, 60
+            reasons["wall_line_count"] = reason("walls_rotating_load")
+            reasons["infill_sparse_density"] = reason("infill_rotating_load")
     if "airtight" in tags:
         walls = max(walls, 4)
         infill = max(infill, 40)
@@ -405,6 +447,10 @@ def build_prompt_rules():
                  "Поддержки для них не включаются: из того же материала они спекаются с деталью.")
     lines.append("- Теплостойкость материала должна быть не ниже max_temp_c + 10 °C. Эластичность - TPU. "
                  "Влажность/химия - PP, PETG, CPE. Износ/скольжение - PA. Жёсткость и нагрев - PC, CPE+.")
+    lines.append("- Нагрузка на вращающуюся деталь или удары: 6 периметров, заполнение 60% gyroid.")
+    lines.append("- Если выбранный материал слаб по требованию задачи (УФ, влага, химия, износ), в ответе прямо назови это ограничение "
+                 "и дай рекомендацию из поля limitations (покраска, УФ-лак, исключить щёлочи). Недоступные на принтере материалы "
+                 "(например, ASA) не предлагай.")
     lines.append("- Нагрузка: 4 периметра, заполнение 40% gyroid. Декор: 2 периметра, заполнение 10%, тонкий слой. "
                  "Прототип: слой 0.2, заполнение 10%.")
     lines.append("- Без поддержек: support_enable=false и ориентация с минимумом нависаний (suggest_orientation, goal=no_supports).")
