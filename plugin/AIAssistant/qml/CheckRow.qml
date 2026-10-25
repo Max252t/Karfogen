@@ -10,7 +10,7 @@ Item
     signal toggled(bool checked)
 
     width: parent ? parent.width : implicitWidth
-    height: Math.max(Style.controlSmall, labels.height)
+    height: Math.max(Style.controlSmall, labels.y + labels.height)
     activeFocusOnTab: enabled
 
     function toggle()

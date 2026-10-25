@@ -14,9 +14,17 @@ Window
     property bool danger: false
     signal confirmed(bool checked)
 
+    function fitHeight()
+    {
+        dialog.minimumHeight = dialog.contentHeight
+        dialog.maximumHeight = dialog.contentHeight
+        dialog.height = dialog.contentHeight
+    }
+
     function ask()
     {
         check.checked = dialog.checked
+        dialog.fitHeight()
         dialog.visible = true
         dialog.requestActivate()
         confirmButton.forceActiveFocus()
@@ -32,12 +40,14 @@ Window
     modality: Qt.WindowModal
     flags: Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
     width: Style.px(440)
-    height: body.height + buttons.height + 3 * Style.s4
+    readonly property int contentHeight: body.height + buttons.height + 3 * Style.s4
+    height: contentHeight
     minimumWidth: width
     maximumWidth: width
-    minimumHeight: height
-    maximumHeight: height
+    minimumHeight: contentHeight
+    maximumHeight: contentHeight
     color: Style.surface
+    onContentHeightChanged: dialog.fitHeight()
 
     Item
     {
