@@ -2,6 +2,9 @@ import threading
 import time
 
 
+VOLATILE_TYPES = frozenset(["status", "slice_progress"])
+
+
 class EventBus(object):
     MAX_EVENTS = 1000
 
@@ -11,18 +14,37 @@ class EventBus(object):
         self._last_id = 0
         self.revision = 0
 
+    def _repeats_last(self, event_type, data):
+        if event_type not in VOLATILE_TYPES:
+            return False
+        for event in reversed(self._events):
+            if event["type"] == event_type:
+                return event["data"] == data
+        return False
+
+    def _trim(self):
+        while len(self._events) > self.MAX_EVENTS:
+            index = 0
+            for position, item in enumerate(self._events):
+                if item["type"] in VOLATILE_TYPES:
+                    index = position
+                    break
+            del self._events[index]
+
     def publish(self, event_type, data=None):
         with self._cond:
+            data = data if data is not None else {}
+            if self._repeats_last(event_type, data):
+                return self._events[-1]
             self._last_id += 1
             event = {
                 "id": self._last_id,
                 "ts": time.time(),
                 "type": event_type,
-                "data": data if data is not None else {},
+                "data": data,
             }
             self._events.append(event)
-            if len(self._events) > self.MAX_EVENTS:
-                del self._events[:len(self._events) - self.MAX_EVENTS]
+            self._trim()
             self._cond.notify_all()
             return event
 
@@ -55,7 +77,8 @@ class EventBus(object):
 
     def load(self, events):
         with self._cond:
-            self._events = list(events)[-self.MAX_EVENTS:]
+            self._events = list(events)
+            self._trim()
             highest = max([e["id"] for e in self._events] or [0])
             self._last_id = max(self._last_id, highest)
             self.revision += 1
