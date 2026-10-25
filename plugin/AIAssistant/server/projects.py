@@ -8,6 +8,7 @@ import uuid
 from .events import VOLATILE_TYPES
 
 from .. import config
+from ..cad.store import get_store
 from . import titles
 
 MAX_NAME = 80
@@ -233,7 +234,7 @@ def load_project(project_id):
     return _read(project_id)
 
 
-def save_project(project_id, events, history, title=None):
+def save_project(project_id, events, history, title=None, generated=None):
     trimmed_events = _trim_events(events)
     stripped_history = _strip_images(history)
     messages = len([m for m in history if m.get("role") == "user"])
@@ -242,6 +243,8 @@ def save_project(project_id, events, history, title=None):
         project["events"] = trimmed_events
         project["history"] = stripped_history
         project["messages"] = messages
+        if generated is not None:
+            project["generated_models"] = generated
         project["updated"] = time.time()
         clean = titles.sanitize_title(title) if title else None
         if clean and project.get("auto_named") and title_source(project) == "default":
@@ -333,6 +336,7 @@ class ProjectManager(object):
                 self.prepare_slicer()
             meta = create_project(name)
             self.current_id = meta["id"]
+            get_store().clear()
             self.agent.set_history([])
             self.bus.load([])
             return meta
@@ -350,6 +354,7 @@ class ProjectManager(object):
             events = project.get("events", [])
             if history:
                 events = heal_events(events, history, service_prompts())
+            get_store().load(project.get("generated_models") or [])
             self.agent.set_history(history)
             self.bus.load(events)
             return _meta(project)
@@ -361,6 +366,7 @@ class ProjectManager(object):
             delete_project(project_id)
             if self.current_id == project_id:
                 self.current_id = None
+                get_store().clear()
                 self.agent.set_history([])
                 self.bus.load([])
 
@@ -371,7 +377,8 @@ class ProjectManager(object):
         events = self.bus.snapshot()
         try:
             project_id = self.current_id
-            meta = save_project(project_id, events, history, self._title_for(project_id, events))
+            meta = save_project(project_id, events, history, self._title_for(project_id, events),
+                                get_store().snapshot())
             if not meta["wants_title"]:
                 self._pending_title = None
             self._last_autosave = time.time()

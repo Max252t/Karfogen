@@ -3,7 +3,10 @@ from ..agent import knowledge
 SCENE_TOOLS = set([
     "load_model", "delete_object", "clear_scene", "rotate_object", "move_object", "scale_object",
     "set_orientation", "lay_flat", "align_symmetry_axis", "arrange_all", "suggest_orientation", "recommend_setup",
+    "create_parametric_model", "update_parametric_model",
 ])
+
+GENERATED_TOOLS = set(["create_parametric_model", "update_parametric_model", "validate_generated_model"])
 
 MODE_LABELS = {"classic": "3D", "cylindrical": "5D Spiral", "cylindrical_full": "5D"}
 
@@ -74,9 +77,22 @@ def _scene(registry):
             for o in result.get("objects", []) if "size_mm" in o]
 
 
+def generated_model_event(payload):
+    validation = payload.get("validation") or {}
+    return {"model_id": payload.get("model_id"), "object_id": payload.get("object_id"),
+            "part_type": payload.get("part_type"), "title": payload.get("title"),
+            "revision": payload.get("revision"), "parameters": payload.get("parameters") or {},
+            "defaults_applied": payload.get("defaults_applied") or [], "size_mm": payload.get("size_mm"),
+            "geometry_path": payload.get("geometry_path"), "warnings": payload.get("warnings") or [],
+            "validation": {"status": validation.get("status"), "errors": validation.get("errors") or [],
+                           "warnings": validation.get("warnings") or []}}
+
+
 def publish_derived(bus, registry, name, args, payload):
     if not isinstance(payload, dict):
         return
+    if name in GENERATED_TOOLS:
+        bus.publish("generated_model", generated_model_event(payload))
     if name == "set_print_mode":
         bus.publish("setting_changed", {"key": "print_mode", "raw": payload.get("new"), "label": tr("mode"),
                                         "old": format_value("print_mode", payload.get("old")),

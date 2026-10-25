@@ -3,6 +3,7 @@ import threading
 import traceback
 
 from .. import config
+from ..cad import service as cad_service
 from ..mcp import protocol
 from ..mcp.registry import get_registry
 from ..server import uploads
@@ -147,6 +148,7 @@ class Agent(object):
     def _build_user_message(self, text, attachment_ids, model_name, with_images=True, forced_mode=None, extra_notes=None,
                             language=None):
         notes = list(extra_notes or [])
+        notes.extend(cad_service.context_notes())
         if forced_mode:
             notes.append("Режим печати зафиксирован пользователем: %s. Используй force_mode=%s в recommend_setup."
                          % (knowledge.MODE_LABELS.get(forced_mode, forced_mode), forced_mode))
