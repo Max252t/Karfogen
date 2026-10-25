@@ -1038,34 +1038,6 @@ class NativeChatController(QObject):
             return False
         return True
 
-    @pyqtProperty("QVariantMap", constant=True)
-    def windowGeometry(self):
-        parts = str(config.get("window_geometry") or "").split(",")
-        try:
-            x, y, w, h = [int(float(p)) for p in parts]
-        except ValueError:
-            return {}
-        if w < 200 or h < 200:
-            return {}
-        result = {"width": w, "height": h}
-        if self._point_visible(x + 40, y + 20):
-            result.update({"x": x, "y": y})
-        return result
-
-    def _point_visible(self, x, y):
-        try:
-            from PyQt5.QtCore import QPoint
-            from PyQt5.QtGui import QGuiApplication
-            screens = QGuiApplication.screens()
-        except Exception:
-            return False
-        return any(screen.availableGeometry().contains(QPoint(x, y)) for screen in screens)
-
-    @pyqtSlot(int, int, int, int)
-    def saveGeometry(self, x, y, width, height):
-        if width >= 200 and height >= 200:
-            config.set_value("window_geometry", "%d,%d,%d,%d" % (x, y, width, height))
-
     @pyqtSlot()
     def windowShown(self):
         self._check_language()

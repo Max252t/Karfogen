@@ -38,6 +38,10 @@ def fresh_manager():
 class StoreTest(unittest.TestCase):
     def setUp(self):
         config.set_value("results_dir", tempfile.mkdtemp())
+        config.set_value("language", "ru")
+
+    def tearDown(self):
+        config.set_value("language", "auto")
 
     def test_create_list_rename_delete(self):
         first = projects.create_project()
