@@ -9,10 +9,18 @@ Window
     property string original: ""
     signal accepted(string name)
 
+    function fitHeight()
+    {
+        dialog.minimumHeight = dialog.contentHeight
+        dialog.maximumHeight = dialog.contentHeight
+        dialog.height = dialog.contentHeight
+    }
+
     function ask(name)
     {
         dialog.original = name
         field.text = name
+        dialog.fitHeight()
         dialog.visible = true
         dialog.requestActivate()
         field.forceActiveFocus()
@@ -33,12 +41,14 @@ Window
     modality: Qt.WindowModal
     flags: Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
     width: Style.px(420)
-    height: column.height + buttons.height + 3 * Style.s4
+    readonly property int contentHeight: column.height + buttons.height + 3 * Style.s4
+    height: contentHeight
     minimumWidth: width
     maximumWidth: width
-    minimumHeight: height
-    maximumHeight: height
+    minimumHeight: contentHeight
+    maximumHeight: contentHeight
     color: Style.surface
+    onContentHeightChanged: dialog.fitHeight()
 
     Item
     {
