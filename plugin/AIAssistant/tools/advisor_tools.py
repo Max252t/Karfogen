@@ -75,11 +75,13 @@ def recommend_setup(args):
     prefer_enduse = bool(set(tags) & FUNCTIONAL_TAGS) and "decorative" not in tags
     material_id = None
     material_type = None
+    skipped = []
     for candidate in ranked:
         material_id = knowledge.resolve_material_id(candidate["type"], available_ids, prefer_enduse, flexibility)
         if material_id:
             material_type = candidate
             break
+        skipped.append(candidate["type"])
     if material_id is None:
         raise ToolError("No suitable material is available for the current printer")
 
@@ -96,6 +98,8 @@ def recommend_setup(args):
         "mode_reasons": mode_reasons,
         "material": {"id": material_id, "type": material_type["type"], "score": material_type["score"],
                      "reason": knowledge.material_reason(material_type["type"], material_id, flexibility),
+                     "properties": knowledge.material_profile(material_type["type"], tags),
+                     "skipped": skipped,
                      "alternatives": [r["type"] for r in ranked[1:4]]},
         "quality_type": quality,
         "quality_reason": reasons.get("quality"),

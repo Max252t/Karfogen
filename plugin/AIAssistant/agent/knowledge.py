@@ -32,10 +32,10 @@ MATERIAL_TYPES = OrderedDict([
     ("PLA", dict(heat=55, stiff=4, flex=1, uv=2, chem=2, moist=3, wear=2, impact=1, ease=5, light=3, food=3, esd=1, detail=5)),
     ("TOUGH_PLA", dict(heat=58, stiff=3, flex=1, uv=2, chem=2, moist=3, wear=2, impact=3, ease=4, light=3, food=3, esd=1, detail=4)),
     ("PETG", dict(heat=75, stiff=3, flex=2, uv=3, chem=4, moist=4, wear=3, impact=3, ease=4, light=3, food=4, esd=1, detail=4)),
-    ("CPE", dict(heat=78, stiff=3, flex=2, uv=3, chem=4, moist=4, wear=3, impact=3, ease=4, light=3, food=4, esd=1, detail=4)),
+    ("CPE", dict(heat=70, stiff=3, flex=2, uv=3, chem=4, moist=4, wear=3, impact=3, ease=4, light=3, food=4, esd=1, detail=4)),
     ("CPE_PLUS", dict(heat=100, stiff=4, flex=1, uv=3, chem=4, moist=4, wear=3, impact=3, ease=3, light=3, food=3, esd=1, detail=3)),
-    ("ABS", dict(heat=95, stiff=3, flex=2, uv=2, chem=3, moist=4, wear=3, impact=3, ease=2, light=5, food=1, esd=1, detail=3)),
-    ("PC", dict(heat=115, stiff=4, flex=1, uv=2, chem=2, moist=3, wear=3, impact=5, ease=1, light=3, food=2, esd=1, detail=3)),
+    ("ABS", dict(heat=85, stiff=3, flex=2, uv=2, chem=3, moist=4, wear=3, impact=3, ease=2, light=5, food=1, esd=1, detail=3)),
+    ("PC", dict(heat=110, stiff=4, flex=1, uv=2, chem=2, moist=3, wear=3, impact=5, ease=1, light=3, food=2, esd=1, detail=3)),
     ("PA", dict(heat=85, stiff=3, flex=2, uv=3, chem=4, moist=1, wear=5, impact=5, ease=2, light=4, food=3, esd=2, detail=3)),
     ("PP", dict(heat=100, stiff=2, flex=3, uv=2, chem=5, moist=5, wear=3, impact=4, ease=1, light=5, food=5, esd=1, detail=2)),
     ("SBS", dict(heat=70, stiff=2, flex=3, uv=3, chem=3, moist=4, wear=3, impact=4, ease=3, light=3, food=2, esd=1, detail=3)),
@@ -44,10 +44,10 @@ MATERIAL_TYPES = OrderedDict([
 
 MATERIAL_IDS = OrderedDict([
     ("PLA", ["generic_pla", "generic_pla_175"]),
-    ("TOUGH_PLA", ["generic_tough_pla", "generic_pla"]),
+    ("TOUGH_PLA", ["generic_tough_pla"]),
     ("PETG", ["generic_petg", "enduse_petg", "generic_petg_175"]),
-    ("CPE", ["generic_cpe", "generic_cpe_175", "generic_petg"]),
-    ("CPE_PLUS", ["generic_cpe_plus", "generic_cpe"]),
+    ("CPE", ["generic_cpe"]),
+    ("CPE_PLUS", ["generic_cpe_plus"]),
     ("ABS", ["generic_abs", "enduse_abs", "generic_abs_175"]),
     ("PC", ["generic_pc", "enduse_pc", "generic_pc_175"]),
     ("PA", ["generic_nylon", "enduse_pa6", "generic_nylon_175"]),
@@ -89,6 +89,17 @@ TAG_WEIGHTS = {
     "esd": {"esd": 3.0},
     "stiff": {"stiff": 3.0, "heat": 0.01},
     "thin_features": {"impact": 2.0, "ease": 0.5},
+}
+
+PROPERTY_LABELS = {
+    "ru": {"heat": "теплостойкость %d °C", "stiff": "жёсткость %d/5", "flex": "эластичность %d/5", "uv": "стойкость к УФ %d/5",
+           "chem": "химстойкость %d/5", "moist": "стойкость к влаге %d/5", "wear": "износостойкость %d/5",
+           "impact": "ударная вязкость %d/5", "light": "лёгкость %d/5", "food": "безопасность для пищи %d/5",
+           "esd": "антистатичность %d/5", "detail": "детализация %d/5", "ease": "простота печати %d/5"},
+    "en": {"heat": "heat resistance %d °C", "stiff": "stiffness %d/5", "flex": "elasticity %d/5", "uv": "UV resistance %d/5",
+           "chem": "chemical resistance %d/5", "moist": "moisture resistance %d/5", "wear": "wear resistance %d/5",
+           "impact": "impact toughness %d/5", "light": "lightness %d/5", "food": "food safety %d/5",
+           "esd": "antistatic %d/5", "detail": "detail %d/5", "ease": "ease of printing %d/5"},
 }
 
 QUALITY_LAYER_HEIGHT = OrderedDict([
@@ -134,6 +145,8 @@ REASONS = {
         "no_support_flex": "эластичная деталь: поддержки из того же материала спекаются с ней и не снимаются; ориентация с минимумом нависаний",
         "infill_thin": "стенка около %.1f мм уже заполняется %d периметрами, заполнение не влияет и не меняется",
         "mat_flex_soft": "эластичная деталь: мягкий термополиуретан для уплотнений (%s); жёсткий Enduse TPU D70 (Шор 70D) не подходит",
+        "mat_unavailable": "недоступны на этом принтере и пропущены: %s",
+        "mat_profile": "по требованиям: %s",
         "mat_flex_hard": "Enduse TPU D70 имеет твёрдость 70 по Шору D: подходит для жёстких уплотнений, для гибких деталей нужен мягкий TPU",
     },
     "en": {
@@ -168,6 +181,8 @@ REASONS = {
         "no_support_flex": "elastic part: supports in the same material fuse with it and cannot be removed; orientation with minimal overhangs",
         "infill_thin": "the wall of about %.1f mm is already filled by %d perimeters, infill has no effect and is left unchanged",
         "mat_flex_soft": "elastic part: soft sealing polyurethane (%s); the rigid Enduse TPU D70 (Shore 70D) does not fit",
+        "mat_unavailable": "not available on this printer and skipped: %s",
+        "mat_profile": "against the requirements: %s",
         "mat_flex_hard": "Enduse TPU D70 is Shore 70D: suitable for rigid seals, flexible parts need a soft TPU",
     },
 }
@@ -262,6 +277,20 @@ def material_reason(material_type, material_id, flexibility):
     if flexibility == "flexible":
         return reason("mat_flex_soft", material_id)
     return ""
+
+
+def material_profile(material_type, tags):
+    from .. import config
+    props = MATERIAL_TYPES.get(material_type)
+    if not props:
+        return []
+    labels = PROPERTY_LABELS.get(config.effective_language(), PROPERTY_LABELS["en"])
+    wanted = ["heat"]
+    for tag in tags or []:
+        for prop in TAG_WEIGHTS.get(tag, {}):
+            if prop in props and prop not in wanted:
+                wanted.append(prop)
+    return [labels[prop] % props[prop] for prop in wanted if prop in labels]
 
 
 def infill_matters(mean_wall_mm, walls):
