@@ -5,6 +5,8 @@ import threading
 import time
 import uuid
 
+from .events import VOLATILE_TYPES
+
 from .. import config
 from . import titles
 
@@ -56,9 +58,18 @@ def _strip_images(history):
     return result
 
 
+def compact_volatile(events):
+    last = {}
+    for index, event in enumerate(events):
+        if event.get("type") in VOLATILE_TYPES:
+            last[event["type"]] = index
+    return [event for index, event in enumerate(events)
+            if event.get("type") not in VOLATILE_TYPES or last.get(event["type"]) == index]
+
+
 def _trim_events(events):
     result = []
-    for event in events:
+    for event in compact_volatile(events):
         data = event.get("data") or {}
         res = data.get("result")
         if isinstance(res, str) and len(res) > MAX_RESULT_CHARS:
@@ -81,6 +92,30 @@ def _log(level, text):
         pass
 
 
+def heal_events(events, history, service=()):
+    has_user = any(event.get("type") == "user_message" for event in events)
+    rebuilt = [event for event in events_from_history(history)
+               if not (event["type"] == "user_message" and event["data"]["text"] in service)]
+    if has_user or not any(event["type"] == "user_message" for event in rebuilt):
+        return events
+    present = set((event["type"], (event.get("data") or {}).get("text")) for event in events)
+    prefix = [event for event in rebuilt if (event["type"], event["data"]["text"]) not in present]
+    return prefix + list(events)
+
+
+NOTE_PREFIXES = ("Режим печати зафиксирован", "Прикреплено изображение", "Прикреплён файл", "Имя результата",
+                 "Язык ответа:", "Reply language:")
+
+
+def strip_notes(content):
+    blocks = content.split("\n\n")
+    if len(blocks) > 1:
+        lines = [line for line in blocks[-1].split("\n") if line]
+        if lines and all(line.startswith(NOTE_PREFIXES) for line in lines):
+            return "\n\n".join(blocks[:-1])
+    return content
+
+
 def events_from_history(history):
     events = []
     for index, message in enumerate(history):
@@ -89,7 +124,7 @@ def events_from_history(history):
         if isinstance(content, list):
             content = " ".join(p.get("text", "") for p in content if p.get("type") == "text")
         if role == "user" and content:
-            text = content.split("\n\n")[0]
+            text = strip_notes(content)
             events.append({"id": len(events) + 1, "ts": 0, "type": "user_message", "data": {"text": text}})
         elif role == "assistant" and content:
             events.append({"id": len(events) + 1, "ts": 0, "type": "assistant_message", "data": {"text": content}})
@@ -313,8 +348,8 @@ class ProjectManager(object):
             self.current_id = project_id
             history = project.get("history", [])
             events = project.get("events", [])
-            if not events and history:
-                events = events_from_history(history)
+            if history:
+                events = heal_events(events, history, service_prompts())
             self.agent.set_history(history)
             self.bus.load(events)
             return _meta(project)
