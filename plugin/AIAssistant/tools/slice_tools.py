@@ -27,6 +27,7 @@ class SliceMonitor(object):
         self.result = None
         self.observed = False
         self.progress = 0.0
+        self.published_percent = -1
         self.finished = threading.Event()
         self.connected = set()
         self._wrappers = []
@@ -37,6 +38,7 @@ class SliceMonitor(object):
             self.state = 2
             self.result = None
             self.progress = 0.0
+            self.published_percent = -1
             self.finished.clear()
 
     def on_state(self, state):
@@ -54,10 +56,13 @@ class SliceMonitor(object):
         get_bus().publish("status", {"text": "slice_state", "state": STATE_NAMES.get(int(state), str(state))})
 
     def on_progress(self, progress):
+        percent = int(round(float(progress) * 100))
         with self.lock:
             self.progress = float(progress)
-        get_bus().publish("slice_progress", {"state": "slicing", "progress": float(progress),
-                                             "percent": int(round(float(progress) * 100))})
+            if percent == self.published_percent:
+                return
+            self.published_percent = percent
+        get_bus().publish("slice_progress", {"state": "slicing", "progress": percent / 100.0, "percent": percent})
 
     def _guard(self, backend, handler):
         def wrapper(value):
