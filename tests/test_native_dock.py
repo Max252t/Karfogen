@@ -189,16 +189,19 @@ class DockManagerTest(unittest.TestCase):
         self.assertTrue(int(self.main.windowState()) & int(Qt.WindowMaximized))
 
     def test_user_resizing_the_panel_is_remembered(self):
+        share = max(0.35, 400.0 / self.available[2])
+        if share > dock_layout.MAX_SHARE:
+            self.skipTest("the screen is too narrow to widen the panel past its minimum width")
         self.manager.open()
         self.pump()
         layout = self.manager.layout()
-        wider = int(self.available[2] * 0.35)
+        wider = int(self.available[2] * share)
         edges = self.manager._edges(self.panel)
         frame = (right(self.available) - wider, self.available[1], wider, self.available[3])
         self.panel.setGeometry(QRect(*dock_layout.shrink(frame, edges)))
         self.pump()
-        self.assertAlmostEqual(float(self.settings.values["panel_share"]), 0.35, places=2)
-        self.assert_docked(0.35)
+        self.assertAlmostEqual(float(self.settings.values["panel_share"]), share, places=2)
+        self.assert_docked(share)
         self.assertNotEqual(layout["panel_frame"], self.manager.layout()["panel_frame"])
 
     def test_moving_the_panel_detaches_and_restores_the_main_window(self):

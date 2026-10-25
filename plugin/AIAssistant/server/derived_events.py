@@ -1,3 +1,5 @@
+from ..agent import knowledge
+
 SCENE_TOOLS = set([
     "load_model", "delete_object", "clear_scene", "rotate_object", "move_object", "scale_object",
     "set_orientation", "lay_flat", "align_symmetry_axis", "arrange_all", "suggest_orientation", "recommend_setup",
@@ -12,11 +14,11 @@ TEXTS = {
     "ru": {"yes": "да", "no": "нет", "time": "%d ч %02d мин", "m": "%.1f м", "g": "%.0f г",
            "mode": "режим", "material": "материал", "quality": "профиль качества",
            "decisions": "Принятые решения", "row_mode": "Режим", "row_material": "Материал",
-           "row_quality": "Профиль качества", "row_orientation": "Ориентация", "alternatives": "альтернативы: %s"},
+           "row_quality": "Профиль качества", "row_orientation": "Ориентация", "row_note": "Примечание", "alternatives": "альтернативы: %s"},
     "en": {"yes": "yes", "no": "no", "time": "%d h %02d min", "m": "%.1f m", "g": "%.0f g",
            "mode": "mode", "material": "material", "quality": "quality profile",
            "decisions": "Decisions made", "row_mode": "Mode", "row_material": "Material",
-           "row_quality": "Quality profile", "row_orientation": "Orientation", "alternatives": "alternatives: %s"},
+           "row_quality": "Quality profile", "row_orientation": "Orientation", "row_note": "Note", "alternatives": "alternatives: %s"},
 }
 
 
@@ -52,12 +54,20 @@ def _format_time(seconds):
 def _decision_rows(plan):
     rows = [[tr("row_mode"), plan["mode_label"], "; ".join(plan.get("mode_reasons") or [])]]
     material = plan["material"]
-    rows.append([tr("row_material"), "%s (%s)" % (material["id"], material["type"]),
-                 tr("alternatives") % ", ".join(material.get("alternatives") or [])])
+    material_note = tr("alternatives") % ", ".join(material.get("alternatives") or [])
+    if material.get("properties"):
+        material_note = knowledge.reason("mat_profile", ", ".join(material["properties"])) + "; " + material_note
+    if material.get("reason"):
+        material_note = material["reason"] + "; " + material_note
+    if material.get("skipped"):
+        material_note += "; " + knowledge.reason("mat_unavailable", ", ".join(material["skipped"]))
+    rows.append([tr("row_material"), "%s (%s)" % (material["id"], material["type"]), material_note])
     rows.append([tr("row_quality"), plan["quality_type"], plan.get("quality_reason") or ""])
     for item in plan.get("settings") or []:
         rows.append([item["key"], str(format_value(item["key"], item["value"])), item.get("reason") or ""])
     rows.append([tr("row_orientation"), plan.get("orientation") or "", ""])
+    for note in (material.get("limitations") or []) + (plan.get("notes") or []):
+        rows.append([tr("row_note"), "", note])
     return rows
 
 

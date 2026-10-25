@@ -17,6 +17,7 @@ from .events import get_bus
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
 MAX_BODY = 150 * 1024 * 1024
+MAX_DISCARD = 1024 * 1024
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
 
 
@@ -100,8 +101,22 @@ class Handler(BaseHTTPRequestHandler):
             _log("e", traceback.format_exc())
             self._send_json({"error": "%s: %s" % (e.__class__.__name__, e)}, 500)
 
+    def _discard_body(self):
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        remaining = min(length, MAX_DISCARD)
+        while remaining > 0:
+            chunk = self.rfile.read(min(remaining, 65536))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+
     def do_POST(self):
         if not self._host_ok():
+            self._discard_body()
+            self.close_connection = True
             self._send_json({"error": "forbidden"}, 403)
             return
         try:

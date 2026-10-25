@@ -46,6 +46,10 @@ class PersistenceFlowTest(unittest.TestCase):
     def events(self):
         return json.loads(urllib.request.urlopen(self.base + "/api/events?since=0").read().decode("utf-8"))["events"]
 
+    def stable_types(self):
+        from AIAssistant.server.events import VOLATILE_TYPES
+        return [e["type"] for e in self.events() if e["type"] not in VOLATILE_TYPES]
+
     def wait_idle(self):
         deadline = time.time() + 10
         while get_agent().is_running() and time.time() < deadline:
@@ -57,16 +61,16 @@ class PersistenceFlowTest(unittest.TestCase):
         self.post("/api/projects", {"action": "create"})
         self.post("/api/message", {"text": "Шестерня под нагрузку"})
         self.wait_idle()
-        before = [e["type"] for e in self.events()]
+        before = self.stable_types()
         self.assertIn("assistant_message", before)
         first = projects.get_manager().current_id
         other = self.post("/api/projects", {"action": "create", "name": "Второй"})["current"]["id"]
         self.assertEqual(self.events(), [])
         self.post("/api/projects", {"action": "open", "id": first})
-        after = [e["type"] for e in self.events()]
+        after = self.stable_types()
         self.assertEqual(after, before)
         self.post("/api/projects", {"action": "open", "id": first})
-        self.assertEqual([e["type"] for e in self.events()], before)
+        self.assertEqual(self.stable_types(), before)
         saved = projects.load_project(first)
         self.assertGreaterEqual(saved["messages"], 1)
         self.assertEqual(saved["name"], "Шестерня под нагрузку")
